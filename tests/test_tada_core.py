@@ -109,6 +109,18 @@ Carole Van Camp: Last line.
         self.assertTrue(math.isclose(metrics["um"]["Per_100_Lexical_Words"], 33.3333, rel_tol=1e-5))
         self.assertEqual(metrics["therefore"]["Per_Minute"], 0.5)
 
+    def test_configured_target_with_no_occurrences_is_reported_as_zero(self):
+        metrics = calculate_metrics(
+            find_candidates("Um, begin.", ["so"], ["um"]),
+            1,
+            60,
+            configured_targets=[("so", "Lexical"), ("um", "Nonlexical")],
+        )
+        by_target = {row["Target"]: row for row in metrics}
+        self.assertEqual(by_target["so"]["Occurrences"], 0)
+        self.assertEqual(by_target["so"]["Per_100_Lexical_Words"], 0)
+        self.assertEqual(by_target["so"]["Per_Minute"], 0)
+
 
     def test_non_speech_annotations_do_not_count_as_words(self):
         tokens = lexical_tokens("Hello [laughter] world (inaudible) um", ["um"])
