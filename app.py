@@ -23,7 +23,7 @@ from dart_core import (
 st.set_page_config(page_title="DART", page_icon="🎯", layout="wide")
 st.title("DART")
 st.caption("Disfluency Analysis and Review Tool")
-st.info("DART identifies candidate speech events for human review. It is not a diagnostic instrument.")
+st.info("DART identifies candidate speech events for human review.")
 
 
 def split_targets(value: str) -> list[str]:
@@ -212,4 +212,3 @@ st.download_button(
 )
 if not reviewer_id.strip():
     st.caption("Enter a reviewer identifier to enable the audit-ready export.")
-
