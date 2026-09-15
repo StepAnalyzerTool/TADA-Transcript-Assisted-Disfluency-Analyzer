@@ -103,6 +103,8 @@ Carole Van Camp: Last line.
         findings = find_candidates("So um therefore so", ["so", "therefore"], ["um"])
         metrics = {row["Target"]: row for row in calculate_metrics(findings, 3, 120)}
         self.assertEqual(metrics["so"]["Occurrences"], 2)
+        self.assertEqual(metrics["so"]["Category"], "Lexical")
+        self.assertEqual(metrics["um"]["Category"], "Nonlexical")
         self.assertTrue(math.isclose(metrics["so"]["Per_100_Lexical_Words"], 66.6667, rel_tol=1e-5))
         self.assertTrue(math.isclose(metrics["um"]["Per_100_Lexical_Words"], 33.3333, rel_tol=1e-5))
         self.assertEqual(metrics["therefore"]["Per_Minute"], 0.5)
