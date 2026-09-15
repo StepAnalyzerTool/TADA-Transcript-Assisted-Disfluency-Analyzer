@@ -171,7 +171,60 @@ def export_ioa_results(results: pd.DataFrame, discrepancies: pd.DataFrame) -> by
     return buffer.getvalue()
 
 
+def render_ioa_calculator() -> None:
+    st.header("Interobserver Agreement Calculator")
+    st.caption("Upload independently completed primary and secondary review files for the same session.")
+    ioa_primary_col, ioa_secondary_col = st.columns(2)
+    primary_file = ioa_primary_col.file_uploader(
+        "Primary review file", type=["xlsx"], key="ioa_primary"
+    )
+    secondary_file = ioa_secondary_col.file_uploader(
+        "Secondary review file", type=["xlsx"], key="ioa_secondary"
+    )
+    if not primary_file or not secondary_file:
+        st.info("Upload both review files to calculate agreement.")
+        return
+    try:
+        primary_data = read_review_workbook(primary_file)
+        secondary_data = read_review_workbook(secondary_file)
+        ioa_results, ioa_discrepancies = compare_review_workbooks(primary_data, secondary_data)
+    except Exception as error:
+        st.error(f"Unable to compare these files: {error}")
+        return
+
+    st.subheader("Agreement results")
+    st.dataframe(ioa_results, hide_index=True, use_container_width=True)
+    st.subheader("Discrepancies")
+    if ioa_discrepancies.empty:
+        st.success("No occurrence-level coding discrepancies were found.")
+    else:
+        st.dataframe(ioa_discrepancies, hide_index=True, use_container_width=True)
+    with st.expander("How agreement is calculated"):
+        st.markdown(
+            "- **Decision agreement:** matching accept/reject decisions divided by all matched or unmatched candidate occurrences.\n"
+            "- **Occurrence agreement:** occurrences accepted by both reviewers divided by occurrences accepted by either reviewer.\n"
+            "- **Category agreement:** matching lexical/nonlexical categories among occurrences accepted by both reviewers.\n"
+            "- **Total-count agreement:** the smaller accepted-occurrence count divided by the larger count."
+        )
+    ioa_bytes = export_ioa_results(ioa_results, ioa_discrepancies)
+    safe_ioa_session = re.sub(r"[^A-Za-z0-9_-]+", "_", primary_data["session"]).strip("_") or "Session"
+    st.download_button(
+        "Download IOA results",
+        data=ioa_bytes,
+        file_name=f"IOA_{safe_ioa_session}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 with st.sidebar:
+    tool_mode = st.radio("Select tool", ["Disfluency coding", "IOA calculator"])
+
+if tool_mode == "IOA calculator":
+    render_ioa_calculator()
+    st.stop()
+
+with st.sidebar:
+    st.divider()
     st.header("Targets")
     lexical_value = st.text_area("Lexical words or phrases", ", ".join(LEXICAL_DEFAULTS))
     nonlexical_value = st.text_area("Nonlexical vocalizations", ", ".join(NONLEXICAL_DEFAULTS))
@@ -407,44 +460,3 @@ st.download_button(
 )
 if not reviewer_id.strip():
     st.caption("Enter a reviewer identifier to enable the audit-ready export.")
-
-st.header("6. Interobserver Agreement Calculator")
-st.caption("Upload independently completed primary and secondary review files for the same session.")
-ioa_primary_col, ioa_secondary_col = st.columns(2)
-primary_file = ioa_primary_col.file_uploader(
-    "Primary review file", type=["xlsx"], key="ioa_primary"
-)
-secondary_file = ioa_secondary_col.file_uploader(
-    "Secondary review file", type=["xlsx"], key="ioa_secondary"
-)
-if primary_file and secondary_file:
-    try:
-        primary_data = read_review_workbook(primary_file)
-        secondary_data = read_review_workbook(secondary_file)
-        ioa_results, ioa_discrepancies = compare_review_workbooks(primary_data, secondary_data)
-    except Exception as error:
-        st.error(f"Unable to compare these files: {error}")
-    else:
-        st.subheader("Agreement results")
-        st.dataframe(ioa_results, hide_index=True, use_container_width=True)
-        st.subheader("Discrepancies")
-        if ioa_discrepancies.empty:
-            st.success("No occurrence-level coding discrepancies were found.")
-        else:
-            st.dataframe(ioa_discrepancies, hide_index=True, use_container_width=True)
-        with st.expander("How agreement is calculated"):
-            st.markdown(
-                "- **Decision agreement:** matching accept/reject decisions divided by all matched or unmatched candidate occurrences.\n"
-                "- **Occurrence agreement:** occurrences accepted by both reviewers divided by occurrences accepted by either reviewer.\n"
-                "- **Category agreement:** matching lexical/nonlexical categories among occurrences accepted by both reviewers.\n"
-                "- **Total-count agreement:** the smaller accepted-occurrence count divided by the larger count."
-            )
-        ioa_bytes = export_ioa_results(ioa_results, ioa_discrepancies)
-        st.download_button(
-            "Download IOA results",
-            data=ioa_bytes,
-            file_name=f"IOA_{safe_session}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-else:
-    st.info("Upload both review files to calculate agreement.")
