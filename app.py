@@ -210,7 +210,33 @@ if add_manual and manual_target.strip():
         "notes": manual_note,
     })
 if st.session_state.manual_findings:
-    st.dataframe(pd.DataFrame(st.session_state.manual_findings), hide_index=True, use_container_width=True)
+    manual_display = pd.DataFrame(st.session_state.manual_findings)
+    manual_display.insert(0, "remove", False)
+    manual_display = st.data_editor(
+        manual_display,
+        key=f"manual_review_{transcript_key}",
+        hide_index=True,
+        use_container_width=True,
+        disabled=[column for column in manual_display.columns if column != "remove"],
+        column_config={
+            "remove": st.column_config.CheckboxColumn("Remove"),
+            "target": "Target",
+            "category": "Category",
+            "context": st.column_config.TextColumn("Context", width="large"),
+            "notes": st.column_config.TextColumn("Reviewer notes", width="medium"),
+        },
+        column_order=["remove", "target", "category", "context", "notes"],
+    )
+    remove_manual = st.button(
+        "Remove selected occurrence(s)",
+        disabled=not bool(manual_display["remove"].any()),
+    )
+    if remove_manual:
+        remove_indices = set(manual_display.index[manual_display["remove"]])
+        st.session_state.manual_findings = [
+            row for index, row in enumerate(st.session_state.manual_findings) if index not in remove_indices
+        ]
+        st.rerun()
 
 all_findings = reviewed_findings + st.session_state.manual_findings
 metrics = calculate_metrics(all_findings, len(words), duration_seconds)
