@@ -150,7 +150,6 @@ component_value = clickable_transcript(
 )
 if component_value is not None and list(component_value) != st.session_state[state_key]:
     st.session_state[state_key] = list(component_value)
-    st.rerun()
 
 accepted_ids = set(st.session_state[state_key])
 for candidate_id, finding in zip(candidate_ids, findings):
