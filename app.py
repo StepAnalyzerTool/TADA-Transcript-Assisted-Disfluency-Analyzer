@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from datetime import date
 from io import BytesIO
-import html
+import hashlib
+from pathlib import Path
 import re
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from dart_core import (
     LEXICAL_DEFAULTS,
@@ -27,29 +29,14 @@ st.title("DART")
 st.caption("Disfluency Analysis and Review Tool")
 st.info("DART identifies candidate speech events for human review.")
 
+clickable_transcript = components.declare_component(
+    "dart_clickable_transcript",
+    path=str(Path(__file__).parent / "clickable_transcript"),
+)
+
 
 def split_targets(value: str) -> list[str]:
     return list(dict.fromkeys(item.strip().casefold() for item in value.split(",") if item.strip()))
-
-
-def highlighted_transcript(text: str, findings: list[dict]) -> str:
-    """Render detected candidates safely with category-specific highlighting."""
-    cleaned = normalize_for_analysis(text)
-    pieces = []
-    cursor = 0
-    colors = {"Lexical": "#dbeafe", "Nonlexical": "#fef3c7"}
-    for finding in findings:
-        start, end = finding["start"], finding["end"]
-        pieces.append(html.escape(cleaned[cursor:start]))
-        observed = html.escape(cleaned[start:end])
-        color = colors.get(finding["category"], "#e5e7eb")
-        pieces.append(
-            f'<mark style="background-color:{color};padding:0.05rem 0.18rem;'
-            f'border-radius:0.2rem;font-weight:700">{observed}</mark>'
-        )
-        cursor = end
-    pieces.append(html.escape(cleaned[cursor:]))
-    return "".join(pieces).replace("\n", "<br>")
 
 
 def export_workbook(summary: dict, metrics: list[dict], decisions: pd.DataFrame, cleaned_text: str) -> bytes:
@@ -131,13 +118,47 @@ nonlexical_targets = split_targets(nonlexical_value)
 words = lexical_tokens(analysis_text, nonlexical_targets)
 findings = find_candidates(analysis_text, lexical_targets, nonlexical_targets)
 
+transcript_key = hashlib.sha256(
+    (normalize_for_analysis(analysis_text) + "|" + ",".join(lexical_targets + nonlexical_targets)).encode()
+).hexdigest()[:16]
+state_key = f"accepted_{transcript_key}"
+candidate_ids = [f"{row['start']}:{row['end']}:{row['target']}" for row in findings]
+if state_key not in st.session_state:
+    st.session_state[state_key] = candidate_ids.copy()
+
 st.subheader("Visual audit")
-st.caption("Blue = lexical candidate · Gold = nonlexical candidate")
-with st.container(border=True):
-    st.markdown(highlighted_transcript(analysis_text, findings), unsafe_allow_html=True)
+st.caption(
+    "Click a highlighted occurrence to accept or reject it. "
+    "Blue = accepted lexical · Gold = accepted nonlexical · Gray = rejected"
+)
+component_findings = [
+    {
+        "id": candidate_id,
+        "start": row["start"],
+        "end": row["end"],
+        "target": row["target"],
+        "category": row["category"],
+    }
+    for candidate_id, row in zip(candidate_ids, findings)
+]
+component_value = clickable_transcript(
+    text=normalize_for_analysis(analysis_text),
+    findings=component_findings,
+    accepted_ids=st.session_state[state_key],
+    key=f"clickable_{transcript_key}",
+    default=st.session_state[state_key],
+)
+if component_value is not None and list(component_value) != st.session_state[state_key]:
+    st.session_state[state_key] = list(component_value)
+    st.rerun()
+
+accepted_ids = set(st.session_state[state_key])
+for candidate_id, finding in zip(candidate_ids, findings):
+    finding["accepted"] = candidate_id in accepted_ids
+    finding["decision"] = "Accepted" if finding["accepted"] else "Rejected"
 
 st.header("3. Review candidate occurrences")
-st.caption("Reject grammatical or incorrectly transcribed instances and add a note when useful.")
+st.caption("Use the visual audit to accept or reject occurrences. Add reviewer notes here when useful.")
 review_df = pd.DataFrame(findings)
 display_columns = ["accepted", "target", "category", "observed_text", "context", "notes"]
 if review_df.empty:
@@ -148,7 +169,7 @@ else:
         review_df[display_columns],
         hide_index=True,
         use_container_width=True,
-        disabled=["target", "category", "observed_text", "context"],
+        disabled=["accepted", "target", "category", "observed_text", "context"],
         column_config={
             "accepted": st.column_config.CheckboxColumn("Accept", default=True),
             "target": "Target",
