@@ -41,6 +41,25 @@ Speaker One: Um, this continues.
         self.assertEqual(parsed.speaker_text["Speaker One"], "So we begin. Um, this continues.")
         self.assertNotIn("00:00", parsed.full_text)
 
+    def test_zoom_saved_caption_text_format(self):
+        text = """[Speaker] 10:00:09
+When you're ready to start.
+
+[Speaker] 10:00:58
+So, good morning. Um, today I will begin.
+
+[Speaker] 10:04:09
+And stop.
+"""
+        parsed = parse_transcript(text, "txt")
+        self.assertEqual(parsed.detected_duration_seconds, 240.0)
+        self.assertEqual(
+            parsed.speaker_text["Speaker"],
+            "When you're ready to start. So, good morning. Um, today I will begin. And stop.",
+        )
+        self.assertNotIn("10:00", parsed.full_text)
+        self.assertNotIn("00:58", parsed.full_text)
+
 
     def test_plain_text_colon_is_not_reliable_speaker(self):
         parsed = parse_transcript("ID: This is content. Another sentence.", "txt")
