@@ -1,10 +1,25 @@
 import math
 import unittest
 
-from dart_core import calculate_metrics, find_candidates, lexical_tokens, parse_transcript, timestamp_seconds
+from dart_core import (
+    LEXICAL_DEFAULTS,
+    NONLEXICAL_DEFAULTS,
+    calculate_metrics,
+    find_candidates,
+    lexical_tokens,
+    parse_transcript,
+    timestamp_seconds,
+)
 
 
 class DartCoreTests(unittest.TestCase):
+    def test_default_target_sets(self):
+        self.assertEqual(
+            NONLEXICAL_DEFAULTS,
+            ("uh", "um", "er", "ah", "mm-hmm", "erm", "hmm", "eh", "huh"),
+        )
+        self.assertEqual(LEXICAL_DEFAULTS, ("like", "you know", "so", "therefore", "I mean"))
+
     def test_timestamp_seconds(self):
         self.assertEqual(timestamp_seconds("00:01:30.500"), 90.5)
         self.assertEqual(timestamp_seconds("01:05,250"), 65.25)
