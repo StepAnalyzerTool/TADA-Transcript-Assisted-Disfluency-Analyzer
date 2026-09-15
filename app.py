@@ -31,7 +31,75 @@ st.set_page_config(
     page_icon="🎯",
     layout="wide",
 )
-st.title(APP_TITLE)
+st.markdown(
+    """
+    <style>
+        :root {
+            --tada-navy: #0b2f5b;
+            --tada-teal: #0b8f9c;
+            --tada-slate: #667085;
+            --tada-pale: #f1f7fc;
+            --tada-border: #b8d7f5;
+        }
+        .tada-brand { margin: 0.4rem 0 1.5rem; }
+        .tada-mark {
+            color: var(--tada-navy);
+            font-size: clamp(3.6rem, 7vw, 6rem);
+            font-weight: 800;
+            letter-spacing: -0.055em;
+            line-height: 0.9;
+        }
+        .tada-name {
+            color: var(--tada-teal);
+            font-size: clamp(1.25rem, 2.6vw, 2rem);
+            font-weight: 750;
+            letter-spacing: 0.12em;
+            line-height: 1.25;
+            margin-top: 1.25rem;
+            text-transform: uppercase;
+        }
+        .tada-expanded {
+            color: var(--tada-navy);
+            font-size: clamp(1rem, 1.7vw, 1.3rem);
+            font-weight: 600;
+            margin-top: 0.3rem;
+        }
+        .tada-rule {
+            background: linear-gradient(90deg, var(--tada-teal), var(--tada-navy));
+            height: 3px;
+            margin: 1.35rem 0 1.15rem;
+            width: 100%;
+        }
+        .tada-tagline {
+            color: var(--tada-slate);
+            font-size: 1.15rem;
+            font-style: italic;
+        }
+        section[data-testid="stSidebar"] { background-color: #f7fafc; }
+        h2, h3 { color: var(--tada-navy); }
+        div[data-testid="stAlert"] {
+            background-color: var(--tada-pale);
+            border-color: var(--tada-border);
+            color: var(--tada-navy);
+        }
+        .stButton > button, .stDownloadButton > button {
+            border-color: var(--tada-teal);
+        }
+        .stButton > button:hover, .stDownloadButton > button:hover {
+            border-color: var(--tada-navy);
+            color: var(--tada-navy);
+        }
+    </style>
+    <div class="tada-brand">
+        <div class="tada-mark">TADA</div>
+        <div class="tada-name">Smooth Talking</div>
+        <div class="tada-expanded">Transcript-Assisted Disfluency Analyzer</div>
+        <div class="tada-rule"></div>
+        <div class="tada-tagline">From the CVC Cosmos · Making every word count.</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 st.info("TADA identifies candidate speech events for human review.")
 
 clickable_transcript = components.declare_component(
