@@ -2,7 +2,7 @@
 
 **Disfluency Analysis and Review Tool**
 
-DART is a browser-based Streamlit application for identifying, reviewing, and quantifying user-defined speech events in transcripts. It accepts pasted text and TXT, DOCX, VTT, and SRT files. DART presents every automatically identified occurrence for human review; it is not a diagnostic instrument.
+DART is a browser-based Streamlit application for identifying, reviewing, and quantifying user-defined speech events in transcripts. It accepts pasted text and TXT, DOCX, VTT, and SRT files. DART presents every automatically identified occurrence for human review.
 
 ## Measures
 
