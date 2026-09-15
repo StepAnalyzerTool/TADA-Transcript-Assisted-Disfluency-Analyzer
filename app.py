@@ -1,4 +1,4 @@
-"""Streamlit interface for the Disfluency Analysis and Review Tool (DART)."""
+"""Streamlit interface for the Transcript-Assisted Disfluency Analyzer (TADA)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-from dart_core import (
+from tada_core import (
     LEXICAL_DEFAULTS,
     NONLEXICAL_DEFAULTS,
     calculate_metrics,
@@ -24,13 +24,13 @@ from dart_core import (
 )
 
 
-st.set_page_config(page_title="DART", page_icon="🎯", layout="wide")
-st.title("DART")
-st.caption("Disfluency Analysis and Review Tool")
-st.info("DART identifies candidate speech events for human review.")
+st.set_page_config(page_title="TADA", page_icon="🎯", layout="wide")
+st.title("TADA")
+st.caption("Transcript-Assisted Disfluency Analyzer")
+st.info("TADA identifies candidate speech events for human review.")
 
 clickable_transcript = components.declare_component(
-    "dart_clickable_transcript",
+    "tada_clickable_transcript",
     path=str(Path(__file__).parent / "clickable_transcript"),
 )
 
@@ -457,7 +457,7 @@ safe_session = re.sub(r"[^A-Za-z0-9_-]+", "_", session_id).strip("_") or "Sessio
 st.download_button(
     "Download reviewed Excel record",
     data=workbook,
-    file_name=f"DART_{safe_session}_{reviewer_role}.xlsx",
+    file_name=f"TADA_{safe_session}_{reviewer_role}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     disabled=not reviewer_id.strip(),
 )
