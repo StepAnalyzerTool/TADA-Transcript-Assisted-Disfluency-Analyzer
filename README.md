@@ -1,8 +1,8 @@
-# DART
+# TADA
 
-**Disfluency Analysis and Review Tool**
+**Transcript-Assisted Disfluency Analyzer**
 
-DART is a browser-based Streamlit application for identifying, reviewing, and quantifying user-defined speech events in transcripts. It accepts pasted text and TXT, DOCX, VTT, and SRT files. DART presents every automatically identified occurrence for human review.
+TADA is a browser-based Streamlit application for identifying, reviewing, and quantifying user-defined speech events in transcripts. It accepts pasted text and TXT, DOCX, VTT, and SRT files. TADA presents every automatically identified occurrence for human review.
 
 ## Measures
 
@@ -30,8 +30,8 @@ python -m unittest discover -s tests
 
 ## Privacy
 
-DART analyzes transcript text during the active Streamlit session. The application does not transcribe audio. Users should not upload identifiable or protected information unless the deployment they are using is approved for that information.
+TADA analyzes transcript text during the active Streamlit session. The application does not transcribe audio. Users should not upload identifiable or protected information unless the deployment they are using is approved for that information.
 
 ## Status
 
-DART is under active development and has not been validated as a diagnostic or clinical measurement instrument.
+TADA is under active development.
