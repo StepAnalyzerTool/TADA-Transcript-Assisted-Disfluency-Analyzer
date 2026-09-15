@@ -202,7 +202,9 @@ def read_review_workbook(uploaded_file) -> dict:
         raise ValueError("Missing required sheet(s): " + ", ".join(sorted(missing)))
     summary = sheets["Session_Summary"]
     decisions = sheets["Occurrence_Review"]
-    required_summary = {"Session_ID", "Reviewer_ID", "Reviewer_Role", "Transcript_SHA256"}
+    required_summary = {
+        "Participant_ID", "Session_Information", "Reviewer_ID", "Reviewer_Role", "Transcript_SHA256"
+    }
     required_decisions = {"start", "end", "target", "category", "accepted"}
     if summary.empty or not required_summary.issubset(summary.columns):
         raise ValueError("The session summary is not from the current IOA-ready export format.")
@@ -212,7 +214,8 @@ def read_review_workbook(uploaded_file) -> dict:
     return {
         "summary": summary,
         "decisions": decisions,
-        "session": str(row["Session_ID"]),
+        "participant": str(row["Participant_ID"]),
+        "session": str(row["Session_Information"]),
         "reviewer": str(row["Reviewer_ID"]),
         "role": str(row["Reviewer_Role"]),
         "transcript_hash": str(row["Transcript_SHA256"]),
@@ -250,8 +253,10 @@ def occurrence_records(frame: pd.DataFrame) -> dict:
 def compare_review_workbooks(primary: dict, secondary: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
     if primary["role"].casefold() != "primary" or secondary["role"].casefold() != "secondary":
         raise ValueError("Select a Primary review file first and a Secondary review file second.")
+    if primary["participant"] != secondary["participant"]:
+        raise ValueError("The files have different participant identifiers.")
     if primary["session"] != secondary["session"]:
-        raise ValueError("The files have different session identifiers.")
+        raise ValueError("The files have different session information.")
     if primary["transcript_hash"] != secondary["transcript_hash"]:
         raise ValueError("The files were generated from different transcript text.")
 
@@ -284,7 +289,8 @@ def compare_review_workbooks(primary: dict, secondary: dict) -> tuple[pd.DataFra
     accepted_count_b = sum(cell_bool(row.get("accepted")) for row in records_b.values())
     percent = lambda numerator, denominator: round(numerator / denominator * 100, 2) if denominator else 100.0
     result = pd.DataFrame([{
-        "Session_ID": primary["session"],
+        "Participant_ID": primary["participant"],
+        "Session_Information": primary["session"],
         "Primary_Reviewer": primary["reviewer"],
         "Secondary_Reviewer": secondary["reviewer"],
         "Decision_Agreement_%": percent(decision_agreements, len(keys)),
@@ -340,11 +346,14 @@ def render_ioa_calculator() -> None:
             "- **Total-count agreement:** the smaller accepted-occurrence count divided by the larger count."
         )
     ioa_bytes = export_ioa_results(ioa_results, ioa_discrepancies)
+    safe_ioa_participant = re.sub(
+        r"[^A-Za-z0-9_-]+", "_", primary_data["participant"]
+    ).strip("_") or "Participant"
     safe_ioa_session = re.sub(r"[^A-Za-z0-9_-]+", "_", primary_data["session"]).strip("_") or "Session"
     st.download_button(
         "Download IOA results",
         data=ioa_bytes,
-        file_name=f"IOA_{safe_ioa_session}.xlsx",
+        file_name=f"IOA_{safe_ioa_participant}_{safe_ioa_session}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -612,14 +621,19 @@ if not metrics_df.empty:
     )
 
 st.header("5. Export")
-session_id = st.text_input("Session identifier", value=re.sub(r"\.[^.]+$", "", source_name))
+participant_col, session_col = st.columns(2)
+participant_id = participant_col.text_input("Participant ID")
+session_information = session_col.text_input(
+    "Session information", value=re.sub(r"\.[^.]+$", "", source_name)
+)
 reviewer_col, role_col = st.columns(2)
 reviewer_id = reviewer_col.text_input("Reviewer identifier")
 reviewer_role = role_col.selectbox("Reviewer role", ["Primary", "Secondary"])
 analysis_date = st.date_input("Analysis date", value=date.today())
 transcript_hash = hashlib.sha256(normalize_for_analysis(analysis_text).encode()).hexdigest()
 summary = {
-    "Session_ID": session_id,
+    "Participant_ID": participant_id,
+    "Session_Information": session_information,
     "Analysis_Date": analysis_date,
     "Reviewer_ID": reviewer_id,
     "Reviewer_Role": reviewer_role,
@@ -657,13 +671,14 @@ summary["Duration_Source"] = duration_source
 summary["Transcript_SHA256"] = transcript_hash
 decision_df = pd.DataFrame(all_findings)
 workbook = export_workbook(summary, metrics, decision_df, selected_text, analysis_text)
-safe_session = re.sub(r"[^A-Za-z0-9_-]+", "_", session_id).strip("_") or "Session"
+safe_participant = re.sub(r"[^A-Za-z0-9_-]+", "_", participant_id).strip("_") or "Participant"
+safe_session = re.sub(r"[^A-Za-z0-9_-]+", "_", session_information).strip("_") or "Session"
 st.download_button(
     "Download reviewed Excel record",
     data=workbook,
-    file_name=f"TADA_{safe_session}_{reviewer_role}.xlsx",
+    file_name=f"TADA_{safe_participant}_{safe_session}_{reviewer_role}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    disabled=not reviewer_id.strip(),
+    disabled=not participant_id.strip() or not reviewer_id.strip(),
 )
-if not reviewer_id.strip():
-    st.caption("Enter a reviewer identifier to enable the audit-ready export.")
+if not participant_id.strip() or not reviewer_id.strip():
+    st.caption("Enter participant and reviewer identifiers to enable the audit-ready export.")
