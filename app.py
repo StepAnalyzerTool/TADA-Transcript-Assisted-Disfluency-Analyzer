@@ -24,12 +24,14 @@ from tada_core import (
 )
 
 
+APP_TITLE = "Smooth Talking: Transcript-Assisted Disfluency Analyzer (TADA)"
+
 st.set_page_config(
-    page_title="Smooth Talking: Transcript-Assisted Disfluency Analyzer (TADA)",
+    page_title=APP_TITLE,
     page_icon="🎯",
     layout="wide",
 )
-st.title("Smooth Talking: Transcript-Assisted Disfluency Analyzer (TADA)")
+st.title(APP_TITLE)
 st.info("TADA identifies candidate speech events for human review.")
 
 clickable_transcript = components.declare_component(
