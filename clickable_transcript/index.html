@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0;
+      color: var(--text-color, #31333f);
+      background: transparent;
+      font-family: "Source Sans 3", "Source Sans Pro", sans-serif;
+      font-size: 1rem;
+      line-height: 1.65;
+    }
+    .transcript {
+      border: 1px solid rgba(128, 128, 128, 0.35);
+      border-radius: 0.5rem;
+      padding: 1rem 1.15rem;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .occurrence {
+      appearance: none;
+      border: 0;
+      border-radius: 0.22rem;
+      color: inherit;
+      cursor: pointer;
+      display: inline;
+      font: inherit;
+      font-weight: 700;
+      line-height: inherit;
+      margin: 0;
+      padding: 0.03rem 0.18rem;
+    }
+    .occurrence.lexical.accepted { background: #dbeafe; color: #172554; }
+    .occurrence.nonlexical.accepted { background: #fef3c7; color: #451a03; }
+    .occurrence.rejected {
+      background: #e5e7eb;
+      color: #4b5563;
+      text-decoration: line-through;
+      opacity: 0.8;
+    }
+    .occurrence:hover { outline: 2px solid #64748b; outline-offset: 1px; }
+    .occurrence:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+    @media (prefers-color-scheme: dark) {
+      body { color: #fafafa; }
+      .occurrence.lexical.accepted { background: #1e3a8a; color: #eff6ff; }
+      .occurrence.nonlexical.accepted { background: #78350f; color: #fffbeb; }
+      .occurrence.rejected { background: #4b5563; color: #e5e7eb; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root" class="transcript" aria-label="Interactive transcript review"></div>
+  <script>
+    const root = document.getElementById("root");
+    let currentArgs = null;
+    let accepted = new Set();
+
+    function send(type, extra = {}) {
+      window.parent.postMessage({ isStreamlitMessage: true, type, ...extra }, "*");
+    }
+
+    function setHeight() {
+      send("streamlit:setFrameHeight", { height: document.documentElement.scrollHeight + 4 });
+    }
+
+    function render() {
+      if (!currentArgs) return;
+      const text = currentArgs.text || "";
+      const findings = currentArgs.findings || [];
+      root.replaceChildren();
+      let cursor = 0;
+      findings.forEach((finding) => {
+        root.append(document.createTextNode(text.slice(cursor, finding.start)));
+        const button = document.createElement("button");
+        const isAccepted = accepted.has(finding.id);
+        button.type = "button";
+        button.className = `occurrence ${finding.category.toLowerCase()} ${isAccepted ? "accepted" : "rejected"}`;
+        button.textContent = text.slice(finding.start, finding.end);
+        button.title = `${isAccepted ? "Accepted" : "Rejected"}: ${finding.target}. Click to ${isAccepted ? "reject" : "accept"}.`;
+        button.setAttribute("aria-pressed", isAccepted ? "true" : "false");
+        button.setAttribute("aria-label", button.title);
+        button.addEventListener("click", () => {
+          if (accepted.has(finding.id)) accepted.delete(finding.id);
+          else accepted.add(finding.id);
+          render();
+          send("streamlit:setComponentValue", { value: Array.from(accepted) });
+        });
+        root.append(button);
+        cursor = finding.end;
+      });
+      root.append(document.createTextNode(text.slice(cursor)));
+      requestAnimationFrame(setHeight);
+    }
+
+    window.addEventListener("message", (event) => {
+      if (!event.data || event.data.type !== "streamlit:render") return;
+      currentArgs = event.data.args || {};
+      accepted = new Set(currentArgs.accepted_ids || []);
+      render();
+    });
+
+    send("streamlit:componentReady", { apiVersion: 1 });
+    window.addEventListener("resize", setHeight);
+  </script>
+</body>
+</html>
