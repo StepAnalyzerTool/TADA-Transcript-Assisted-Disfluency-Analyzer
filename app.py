@@ -555,11 +555,11 @@ session_id = st.text_input("Session identifier", value=re.sub(r"\.[^.]+$", "", s
 reviewer_col, role_col = st.columns(2)
 reviewer_id = reviewer_col.text_input("Reviewer identifier")
 reviewer_role = role_col.selectbox("Reviewer role", ["Primary", "Secondary"])
-session_date = st.date_input("Session date", value=date.today())
+analysis_date = st.date_input("Analysis date", value=date.today())
 transcript_hash = hashlib.sha256(normalize_for_analysis(analysis_text).encode()).hexdigest()
 summary = {
     "Session_ID": session_id,
-    "Session_Date": session_date,
+    "Analysis_Date": analysis_date,
     "Reviewer_ID": reviewer_id,
     "Reviewer_Role": reviewer_role,
     "Source_File": source_name,
