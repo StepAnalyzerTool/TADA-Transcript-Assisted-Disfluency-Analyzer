@@ -324,14 +324,24 @@ parsed = parse_transcript(raw_text, source_format)
 
 st.header("2. Select speech and verify duration")
 selected_text = parsed.full_text
-if parsed.speaker_text:
+if len(parsed.speaker_text) >= 2:
     options = ["All detected speech"] + sorted(parsed.speaker_text)
     chosen_speaker = st.selectbox("Speaker", options)
     if chosen_speaker != "All detected speech":
         selected_text = parsed.speaker_text[chosen_speaker]
+elif len(parsed.speaker_text) == 1:
+    only_speaker = next(iter(parsed.speaker_text))
+    chosen_speaker = only_speaker
+    selected_text = parsed.speaker_text[only_speaker]
+    st.caption(
+        f"Only one speaker label was detected ({only_speaker}). TADA cannot separate speakers in this file; "
+        "remove other-speaker passages from the editable working copy below."
+    )
 else:
     chosen_speaker = "Not available"
-    st.caption("No reliable speaker labels were detected.")
+    st.caption(
+        "No reliable speaker labels were detected. Remove other-speaker passages from the editable working copy below."
+    )
 
 st.subheader("Edit text included in analysis")
 st.caption(
