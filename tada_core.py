@@ -185,9 +185,14 @@ def calculate_metrics(
     findings: list[dict],
     total_lexical_words: int,
     duration_seconds: float | None,
+    configured_targets: Iterable[tuple[str, str]] | None = None,
 ) -> list[dict]:
     accepted = [row for row in findings if bool(row.get("accepted", False))]
     targets = sorted({(row["target"], row.get("category", "")) for row in findings})
+    if configured_targets:
+        targets = sorted(set(targets) | {
+            (target.casefold(), category) for target, category in configured_targets
+        })
     rows = []
     for target, category in targets:
         count = sum(
