@@ -86,7 +86,10 @@
           if (accepted.has(finding.id)) accepted.delete(finding.id);
           else accepted.add(finding.id);
           render();
-          send("streamlit:setComponentValue", { value: Array.from(accepted) });
+          send("streamlit:setComponentValue", {
+            value: Array.from(accepted),
+            dataType: "json"
+          });
         });
         root.append(button);
         cursor = finding.end;
