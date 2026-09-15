@@ -1,4 +1,4 @@
-# DART counting rules
+# TADA counting rules
 
 Occurrences per 100 lexical words = target occurrences / total lexical words spoken × 100.
 
