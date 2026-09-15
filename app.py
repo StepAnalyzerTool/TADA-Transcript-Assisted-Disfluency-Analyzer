@@ -11,6 +11,8 @@ import re
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 
 from tada_core import (
     LEXICAL_DEFAULTS,
@@ -112,6 +114,64 @@ def split_targets(value: str) -> list[str]:
     return list(dict.fromkeys(item.strip().casefold() for item in value.split(",") if item.strip()))
 
 
+def style_export_workbook(writer: pd.ExcelWriter) -> None:
+    navy = "0B2F5B"
+    teal = "0B8F9C"
+    pale_blue = "F1F7FC"
+    border_blue = "B8D7F5"
+    white = "FFFFFF"
+    dark = "243447"
+    thin_border = Border(bottom=Side(style="thin", color=border_blue))
+    tab_colors = {
+        "Session_Summary": navy,
+        "Target_Metrics": teal,
+        "Occurrence_Review": "6FA8DC",
+        "Reviewed_Transcript": "98A2B3",
+    }
+
+    for sheet_name, worksheet in writer.sheets.items():
+        worksheet.sheet_view.showGridLines = False
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+        worksheet.sheet_properties.tabColor = tab_colors.get(sheet_name, teal)
+        worksheet.row_dimensions[1].height = 34
+
+        for cell in worksheet[1]:
+            cell.fill = PatternFill("solid", fgColor=navy)
+            cell.font = Font(name="Arial", size=10, bold=True, color=white)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.border = thin_border
+
+        for row_index in range(2, worksheet.max_row + 1):
+            if row_index % 2 == 0:
+                for cell in worksheet[row_index]:
+                    cell.fill = PatternFill("solid", fgColor=pale_blue)
+            for cell in worksheet[row_index]:
+                cell.font = Font(name="Arial", size=10, color=dark)
+                cell.alignment = Alignment(vertical="center")
+
+        for column_index, column_cells in enumerate(worksheet.columns, start=1):
+            header = str(worksheet.cell(1, column_index).value or "")
+            sample_lengths = [len(str(cell.value)) for cell in column_cells if cell.value is not None]
+            width = min(max(sample_lengths + [len(header)]) + 2, 42)
+            if header in {"Context", "Reviewer_notes", "Original_Selected_Text", "Analyzed_Text"}:
+                width = 55
+            worksheet.column_dimensions[get_column_letter(column_index)].width = max(width, 12)
+
+            if "Date" in header:
+                for cell in list(column_cells)[1:]:
+                    cell.number_format = "mm/dd/yyyy"
+            elif "Per_100" in header or "Per_Minute" in header:
+                for cell in list(column_cells)[1:]:
+                    cell.number_format = "0.000"
+            elif "Duration_Minutes" in header:
+                for cell in list(column_cells)[1:]:
+                    cell.number_format = "0.00"
+            elif "Total" in header or "Occurrences" in header:
+                for cell in list(column_cells)[1:]:
+                    cell.number_format = "#,##0"
+
+
 def export_workbook(
     summary: dict,
     metrics: list[dict],
@@ -130,6 +190,7 @@ def export_workbook(
         }]).to_excel(
             writer, sheet_name="Reviewed_Transcript", index=False
         )
+        style_export_workbook(writer)
     return buffer.getvalue()
 
 
@@ -565,14 +626,35 @@ summary = {
     "Source_File": source_name,
     "Source_Format": source_format,
     "Selected_Speaker": chosen_speaker,
+    "Total_Words_Spoken": len(words),
     "Duration_Minutes": duration_seconds / 60 if duration_seconds else None,
-    "Duration_Source": duration_source,
-    "Total_Lexical_Words": len(words),
-    "Accepted_Target_Occurrences": accepted_total,
-    "Total_Disfluencies_Per_100_Lexical_Words": total_per_100_words,
+    "Total_Disfluencies": accepted_total,
+    "Total_Disfluencies_Per_100_Words": total_per_100_words,
     "Total_Disfluencies_Per_Minute": total_per_minute,
-    "Transcript_SHA256": transcript_hash,
 }
+
+accepted_findings = [row for row in all_findings if bool(row.get("accepted"))]
+for category in ("Lexical", "Nonlexical"):
+    category_count = sum(row.get("category") == category for row in accepted_findings)
+    category_prefix = category.replace(" ", "_")
+    summary[f"{category_prefix}_Total_Disfluencies"] = category_count
+    summary[f"{category_prefix}_Disfluencies_Per_100_Words"] = (
+        category_count / len(words) * 100 if words else None
+    )
+    summary[f"{category_prefix}_Disfluencies_Per_Minute"] = (
+        category_count / (duration_seconds / 60) if duration_seconds else None
+    )
+
+for target_metric in metrics:
+    target_slug = re.sub(r"[^A-Za-z0-9]+", "_", target_metric["Target"]).strip("_") or "Target"
+    target_prefix = f"Target_{target_slug}"
+    summary[f"{target_prefix}_Category"] = target_metric.get("Category", "")
+    summary[f"{target_prefix}_Total_Disfluencies"] = target_metric["Occurrences"]
+    summary[f"{target_prefix}_Disfluencies_Per_100_Words"] = target_metric["Per_100_Lexical_Words"]
+    summary[f"{target_prefix}_Disfluencies_Per_Minute"] = target_metric["Per_Minute"]
+
+summary["Duration_Source"] = duration_source
+summary["Transcript_SHA256"] = transcript_hash
 decision_df = pd.DataFrame(all_findings)
 workbook = export_workbook(summary, metrics, decision_df, selected_text, analysis_text)
 safe_session = re.sub(r"[^A-Za-z0-9_-]+", "_", session_id).strip("_") or "Session"
