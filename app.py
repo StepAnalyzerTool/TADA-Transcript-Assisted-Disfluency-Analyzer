@@ -115,7 +115,7 @@ def compare_review_workbooks(primary: dict, secondary: dict) -> tuple[pd.DataFra
     records_a = occurrence_records(primary["decisions"])
     records_b = occurrence_records(secondary["decisions"])
     keys = sorted(set(records_a) | set(records_b), key=str)
-    decision_agreements = both_accepted = either_accepted = both_coded = category_agreements = 0
+    decision_agreements = both_accepted = either_accepted = 0
     discrepancies = []
     for key in keys:
         row_a, row_b = records_a.get(key), records_b.get(key)
@@ -127,13 +127,7 @@ def compare_review_workbooks(primary: dict, secondary: dict) -> tuple[pd.DataFra
             either_accepted += 1
         if accepted_a and accepted_b:
             both_accepted += 1
-            both_coded += 1
-            if str(row_a.get("category", "")).casefold() == str(row_b.get("category", "")).casefold():
-                category_agreements += 1
-        if row_a is None or row_b is None or accepted_a != accepted_b or (
-            accepted_a and accepted_b
-            and str(row_a.get("category", "")).casefold() != str(row_b.get("category", "")).casefold()
-        ):
+        if row_a is None or row_b is None or accepted_a != accepted_b:
             sample = row_a or row_b
             discrepancies.append({
                 "Target": sample.get("target", ""),
@@ -141,8 +135,6 @@ def compare_review_workbooks(primary: dict, secondary: dict) -> tuple[pd.DataFra
                 "Context": sample.get("context", ""),
                 "Primary_Decision": "Accepted" if accepted_a else "Rejected / not present",
                 "Secondary_Decision": "Accepted" if accepted_b else "Rejected / not present",
-                "Primary_Category": row_a.get("category", "") if row_a else "",
-                "Secondary_Category": row_b.get("category", "") if row_b else "",
             })
 
     accepted_count_a = sum(cell_bool(row.get("accepted")) for row in records_a.values())
@@ -154,7 +146,6 @@ def compare_review_workbooks(primary: dict, secondary: dict) -> tuple[pd.DataFra
         "Secondary_Reviewer": secondary["reviewer"],
         "Decision_Agreement_%": percent(decision_agreements, len(keys)),
         "Occurrence_Agreement_%": percent(both_accepted, either_accepted),
-        "Category_Agreement_%": percent(category_agreements, both_coded),
         "Total_Count_Agreement_%": percent(min(accepted_count_a, accepted_count_b), max(accepted_count_a, accepted_count_b)),
         "Primary_Accepted": accepted_count_a,
         "Secondary_Accepted": accepted_count_b,
@@ -203,7 +194,6 @@ def render_ioa_calculator() -> None:
         st.markdown(
             "- **Decision agreement:** matching accept/reject decisions divided by all matched or unmatched candidate occurrences.\n"
             "- **Occurrence agreement:** occurrences accepted by both reviewers divided by occurrences accepted by either reviewer.\n"
-            "- **Category agreement:** matching lexical/nonlexical categories among occurrences accepted by both reviewers.\n"
             "- **Total-count agreement:** the smaller accepted-occurrence count divided by the larger count."
         )
     ioa_bytes = export_ioa_results(ioa_results, ioa_discrepancies)
