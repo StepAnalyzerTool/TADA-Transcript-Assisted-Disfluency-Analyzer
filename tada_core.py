@@ -16,6 +16,7 @@ LEXICAL_DEFAULTS = ("like", "you know", "so", "therefore", "I mean")
 
 TIME_TOKEN = r"(?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?"
 CUE_RE = re.compile(rf"^\s*({TIME_TOKEN})\s*-->\s*({TIME_TOKEN})(?:\s+.*)?$", re.MULTILINE)
+BRACKETED_TIMESTAMP_RE = re.compile(rf"^\s*\[([^\]]+)\]\s+({TIME_TOKEN})\s*$", re.MULTILINE)
 SPEAKER_RE = re.compile(r"^\s*([^:\n]{1,80}):\s*(.*)$")
 WORD_RE = re.compile(r"[A-Za-z0-9]+(?:[’'][A-Za-z0-9]+)*(?:-[A-Za-z0-9]+)*")
 NON_SPEECH_RE = re.compile(r"\[(?:[^\]]+)\]|\((?:inaudible|unintelligible|laughter|music|silence)\)", re.I)
@@ -70,15 +71,27 @@ def parse_transcript(text: str, source_format: str = "pasted text") -> Transcrip
     """Parse plain text, VTT, or SRT while preserving only spoken content."""
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
     cue_matches = list(CUE_RE.finditer(normalized))
-    captioned = bool(cue_matches) or source_format.lower() in {"vtt", "srt", ".vtt", ".srt"}
-    first = timestamp_seconds(cue_matches[0].group(1)) if cue_matches else None
-    last = timestamp_seconds(cue_matches[-1].group(2)) if cue_matches else None
+    bracketed_matches = list(BRACKETED_TIMESTAMP_RE.finditer(normalized))
+    captioned = bool(cue_matches or bracketed_matches) or source_format.lower() in {"vtt", "srt", ".vtt", ".srt"}
+    if cue_matches:
+        first = timestamp_seconds(cue_matches[0].group(1))
+        last = timestamp_seconds(cue_matches[-1].group(2))
+    elif bracketed_matches:
+        first = timestamp_seconds(bracketed_matches[0].group(2))
+        last = timestamp_seconds(bracketed_matches[-1].group(2))
+    else:
+        first = last = None
     duration = last - first if first is not None and last is not None and last >= first else None
 
     speakers: dict[str, list[str]] = {}
     parsed_lines: list[tuple[str | None, str, str]] = []
+    current_bracketed_speaker: str | None = None
     for raw_line in normalized.splitlines():
         line = raw_line.strip().lstrip("\ufeff")
+        bracketed_timestamp = BRACKETED_TIMESTAMP_RE.fullmatch(line)
+        if bracketed_timestamp:
+            current_bracketed_speaker = bracketed_timestamp.group(1).strip()
+            continue
         if not line or line.upper() == "WEBVTT" or CUE_RE.fullmatch(line) or (captioned and _is_cue_number(line)):
             continue
         # Common VTT metadata lines.
@@ -90,6 +103,9 @@ def parse_transcript(text: str, source_format: str = "pasted text") -> Transcrip
             speaker, spoken = match.groups()
             speakers.setdefault(speaker.strip(), []).append(spoken.strip())
             parsed_lines.append((speaker.strip(), spoken.strip(), line))
+        elif current_bracketed_speaker:
+            speakers.setdefault(current_bracketed_speaker, []).append(line)
+            parsed_lines.append((current_bracketed_speaker, line, line))
         else:
             parsed_lines.append((None, line, line))
 
