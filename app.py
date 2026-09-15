@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from io import BytesIO
+import html
 import re
 
 import pandas as pd
@@ -15,6 +16,7 @@ from dart_core import (
     calculate_metrics,
     find_candidates,
     lexical_tokens,
+    normalize_for_analysis,
     parse_transcript,
     read_transcript_upload,
 )
@@ -28,6 +30,26 @@ st.info("DART identifies candidate speech events for human review.")
 
 def split_targets(value: str) -> list[str]:
     return list(dict.fromkeys(item.strip().casefold() for item in value.split(",") if item.strip()))
+
+
+def highlighted_transcript(text: str, findings: list[dict]) -> str:
+    """Render detected candidates safely with category-specific highlighting."""
+    cleaned = normalize_for_analysis(text)
+    pieces = []
+    cursor = 0
+    colors = {"Lexical": "#dbeafe", "Nonlexical": "#fef3c7"}
+    for finding in findings:
+        start, end = finding["start"], finding["end"]
+        pieces.append(html.escape(cleaned[cursor:start]))
+        observed = html.escape(cleaned[start:end])
+        color = colors.get(finding["category"], "#e5e7eb")
+        pieces.append(
+            f'<mark style="background-color:{color};padding:0.05rem 0.18rem;'
+            f'border-radius:0.2rem;font-weight:700">{observed}</mark>'
+        )
+        cursor = end
+    pieces.append(html.escape(cleaned[cursor:]))
+    return "".join(pieces).replace("\n", "<br>")
 
 
 def export_workbook(summary: dict, metrics: list[dict], decisions: pd.DataFrame, cleaned_text: str) -> bytes:
@@ -104,13 +126,15 @@ else:
     duration_minutes = None
     duration_seconds = None
 
-with st.expander("Preview text used for analysis"):
-    st.write(analysis_text)
-
 lexical_targets = split_targets(lexical_value)
 nonlexical_targets = split_targets(nonlexical_value)
 words = lexical_tokens(analysis_text, nonlexical_targets)
 findings = find_candidates(analysis_text, lexical_targets, nonlexical_targets)
+
+st.subheader("Visual audit")
+st.caption("Blue = lexical candidate · Gold = nonlexical candidate")
+with st.container(border=True):
+    st.markdown(highlighted_transcript(analysis_text, findings), unsafe_allow_html=True)
 
 st.header("3. Review candidate occurrences")
 st.caption("Reject grammatical or incorrectly transcribed instances and add a note when useful.")
