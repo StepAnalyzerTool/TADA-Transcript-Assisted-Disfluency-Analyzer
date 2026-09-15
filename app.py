@@ -51,6 +51,126 @@ def export_workbook(summary: dict, metrics: list[dict], decisions: pd.DataFrame,
     return buffer.getvalue()
 
 
+def read_review_workbook(uploaded_file) -> dict:
+    sheets = pd.read_excel(uploaded_file, sheet_name=None)
+    required = {"Session_Summary", "Occurrence_Review", "Reviewed_Transcript"}
+    missing = required - set(sheets)
+    if missing:
+        raise ValueError("Missing required sheet(s): " + ", ".join(sorted(missing)))
+    summary = sheets["Session_Summary"]
+    decisions = sheets["Occurrence_Review"]
+    required_summary = {"Session_ID", "Reviewer_ID", "Reviewer_Role", "Transcript_SHA256"}
+    required_decisions = {"start", "end", "target", "category", "accepted"}
+    if summary.empty or not required_summary.issubset(summary.columns):
+        raise ValueError("The session summary is not from the current IOA-ready export format.")
+    if not required_decisions.issubset(decisions.columns):
+        raise ValueError("The occurrence review is not from the current IOA-ready export format.")
+    row = summary.iloc[0]
+    return {
+        "summary": summary,
+        "decisions": decisions,
+        "session": str(row["Session_ID"]),
+        "reviewer": str(row["Reviewer_ID"]),
+        "role": str(row["Reviewer_Role"]),
+        "transcript_hash": str(row["Transcript_SHA256"]),
+    }
+
+
+def cell_bool(value) -> bool:
+    if pd.isna(value):
+        return False
+    if isinstance(value, str):
+        return value.strip().casefold() in {"true", "yes", "1", "accepted", "manually added"}
+    return bool(value)
+
+
+def occurrence_records(frame: pd.DataFrame) -> dict:
+    """Create stable, duplicate-safe keys for automatic and manual occurrences."""
+    records = {}
+    duplicate_counts = {}
+    for row in frame.to_dict("records"):
+        target = str(row.get("target", "")).strip().casefold()
+        if pd.notna(row.get("start")) and pd.notna(row.get("end")):
+            base = ("position", int(float(row["start"])), int(float(row["end"])), target)
+        else:
+            base = (
+                "manual",
+                target,
+                str(row.get("observed_text", "")).strip().casefold(),
+                str(row.get("context", "")).strip().casefold(),
+            )
+        duplicate_counts[base] = duplicate_counts.get(base, 0) + 1
+        records[base + (duplicate_counts[base],)] = row
+    return records
+
+
+def compare_review_workbooks(primary: dict, secondary: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if primary["role"].casefold() != "primary" or secondary["role"].casefold() != "secondary":
+        raise ValueError("Select a Primary review file first and a Secondary review file second.")
+    if primary["session"] != secondary["session"]:
+        raise ValueError("The files have different session identifiers.")
+    if primary["transcript_hash"] != secondary["transcript_hash"]:
+        raise ValueError("The files were generated from different transcript text.")
+
+    records_a = occurrence_records(primary["decisions"])
+    records_b = occurrence_records(secondary["decisions"])
+    keys = sorted(set(records_a) | set(records_b), key=str)
+    decision_agreements = both_accepted = either_accepted = both_coded = category_agreements = 0
+    discrepancies = []
+    for key in keys:
+        row_a, row_b = records_a.get(key), records_b.get(key)
+        accepted_a = cell_bool(row_a.get("accepted")) if row_a else False
+        accepted_b = cell_bool(row_b.get("accepted")) if row_b else False
+        if row_a is not None and row_b is not None and accepted_a == accepted_b:
+            decision_agreements += 1
+        if accepted_a or accepted_b:
+            either_accepted += 1
+        if accepted_a and accepted_b:
+            both_accepted += 1
+            both_coded += 1
+            if str(row_a.get("category", "")).casefold() == str(row_b.get("category", "")).casefold():
+                category_agreements += 1
+        if row_a is None or row_b is None or accepted_a != accepted_b or (
+            accepted_a and accepted_b
+            and str(row_a.get("category", "")).casefold() != str(row_b.get("category", "")).casefold()
+        ):
+            sample = row_a or row_b
+            discrepancies.append({
+                "Target": sample.get("target", ""),
+                "Observed_Text": sample.get("observed_text", ""),
+                "Context": sample.get("context", ""),
+                "Primary_Decision": "Accepted" if accepted_a else "Rejected / not present",
+                "Secondary_Decision": "Accepted" if accepted_b else "Rejected / not present",
+                "Primary_Category": row_a.get("category", "") if row_a else "",
+                "Secondary_Category": row_b.get("category", "") if row_b else "",
+            })
+
+    accepted_count_a = sum(cell_bool(row.get("accepted")) for row in records_a.values())
+    accepted_count_b = sum(cell_bool(row.get("accepted")) for row in records_b.values())
+    percent = lambda numerator, denominator: round(numerator / denominator * 100, 2) if denominator else 100.0
+    result = pd.DataFrame([{
+        "Session_ID": primary["session"],
+        "Primary_Reviewer": primary["reviewer"],
+        "Secondary_Reviewer": secondary["reviewer"],
+        "Decision_Agreement_%": percent(decision_agreements, len(keys)),
+        "Occurrence_Agreement_%": percent(both_accepted, either_accepted),
+        "Category_Agreement_%": percent(category_agreements, both_coded),
+        "Total_Count_Agreement_%": percent(min(accepted_count_a, accepted_count_b), max(accepted_count_a, accepted_count_b)),
+        "Primary_Accepted": accepted_count_a,
+        "Secondary_Accepted": accepted_count_b,
+        "Discrepancies": len(discrepancies),
+    }])
+    return result, pd.DataFrame(discrepancies)
+
+
+def export_ioa_results(results: pd.DataFrame, discrepancies: pd.DataFrame) -> bytes:
+    buffer = BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        results.to_excel(writer, sheet_name="IOA_Results", index=False)
+        discrepancies.to_excel(writer, sheet_name="Discrepancies", index=False)
+    return buffer.getvalue()
+
+
 with st.sidebar:
     st.header("Targets")
     lexical_value = st.text_area("Lexical words or phrases", ", ".join(LEXICAL_DEFAULTS))
@@ -256,12 +376,16 @@ if not metrics_df.empty:
 
 st.header("5. Export")
 session_id = st.text_input("Session identifier", value=re.sub(r"\.[^.]+$", "", source_name))
-reviewer_id = st.text_input("Reviewer identifier")
+reviewer_col, role_col = st.columns(2)
+reviewer_id = reviewer_col.text_input("Reviewer identifier")
+reviewer_role = role_col.selectbox("Reviewer role", ["Primary", "Secondary"])
 session_date = st.date_input("Session date", value=date.today())
+transcript_hash = hashlib.sha256(normalize_for_analysis(analysis_text).encode()).hexdigest()
 summary = {
     "Session_ID": session_id,
     "Session_Date": session_date,
     "Reviewer_ID": reviewer_id,
+    "Reviewer_Role": reviewer_role,
     "Source_File": source_name,
     "Source_Format": source_format,
     "Selected_Speaker": chosen_speaker,
@@ -269,6 +393,7 @@ summary = {
     "Duration_Source": duration_source,
     "Total_Lexical_Words": len(words),
     "Accepted_Target_Occurrences": sum(bool(row.get("accepted")) for row in all_findings),
+    "Transcript_SHA256": transcript_hash,
 }
 decision_df = pd.DataFrame(all_findings)
 workbook = export_workbook(summary, metrics, decision_df, analysis_text)
@@ -276,9 +401,50 @@ safe_session = re.sub(r"[^A-Za-z0-9_-]+", "_", session_id).strip("_") or "Sessio
 st.download_button(
     "Download reviewed Excel record",
     data=workbook,
-    file_name=f"DART_{safe_session}.xlsx",
+    file_name=f"DART_{safe_session}_{reviewer_role}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     disabled=not reviewer_id.strip(),
 )
 if not reviewer_id.strip():
     st.caption("Enter a reviewer identifier to enable the audit-ready export.")
+
+st.header("6. Interobserver Agreement Calculator")
+st.caption("Upload independently completed primary and secondary review files for the same session.")
+ioa_primary_col, ioa_secondary_col = st.columns(2)
+primary_file = ioa_primary_col.file_uploader(
+    "Primary review file", type=["xlsx"], key="ioa_primary"
+)
+secondary_file = ioa_secondary_col.file_uploader(
+    "Secondary review file", type=["xlsx"], key="ioa_secondary"
+)
+if primary_file and secondary_file:
+    try:
+        primary_data = read_review_workbook(primary_file)
+        secondary_data = read_review_workbook(secondary_file)
+        ioa_results, ioa_discrepancies = compare_review_workbooks(primary_data, secondary_data)
+    except Exception as error:
+        st.error(f"Unable to compare these files: {error}")
+    else:
+        st.subheader("Agreement results")
+        st.dataframe(ioa_results, hide_index=True, use_container_width=True)
+        st.subheader("Discrepancies")
+        if ioa_discrepancies.empty:
+            st.success("No occurrence-level coding discrepancies were found.")
+        else:
+            st.dataframe(ioa_discrepancies, hide_index=True, use_container_width=True)
+        with st.expander("How agreement is calculated"):
+            st.markdown(
+                "- **Decision agreement:** matching accept/reject decisions divided by all matched or unmatched candidate occurrences.\n"
+                "- **Occurrence agreement:** occurrences accepted by both reviewers divided by occurrences accepted by either reviewer.\n"
+                "- **Category agreement:** matching lexical/nonlexical categories among occurrences accepted by both reviewers.\n"
+                "- **Total-count agreement:** the smaller accepted-occurrence count divided by the larger count."
+            )
+        ioa_bytes = export_ioa_results(ioa_results, ioa_discrepancies)
+        st.download_button(
+            "Download IOA results",
+            data=ioa_bytes,
+            file_name=f"IOA_{safe_session}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+else:
+    st.info("Upload both review files to calculate agreement.")
