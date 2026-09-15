@@ -24,9 +24,12 @@ from tada_core import (
 )
 
 
-st.set_page_config(page_title="TADA", page_icon="🎯", layout="wide")
-st.title("TADA")
-st.caption("Transcript-Assisted Disfluency Analyzer")
+st.set_page_config(
+    page_title="Smooth Talking: Transcript-Assisted Disfluency Analyzer (TADA)",
+    page_icon="🎯",
+    layout="wide",
+)
+st.title("Smooth Talking: Transcript-Assisted Disfluency Analyzer (TADA)")
 st.info("TADA identifies candidate speech events for human review.")
 
 clickable_transcript = components.declare_component(
