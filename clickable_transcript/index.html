@@ -63,7 +63,8 @@
     }
 
     function setHeight() {
-      send("streamlit:setFrameHeight", { height: document.documentElement.scrollHeight + 4 });
+      const contentHeight = Math.ceil(root.getBoundingClientRect().height);
+      send("streamlit:setFrameHeight", { height: contentHeight + 4 });
     }
 
     function render() {
