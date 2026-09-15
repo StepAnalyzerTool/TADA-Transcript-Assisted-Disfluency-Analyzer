@@ -187,12 +187,16 @@ def calculate_metrics(
     duration_seconds: float | None,
 ) -> list[dict]:
     accepted = [row for row in findings if bool(row.get("accepted", False))]
-    targets = sorted({row["target"] for row in findings})
+    targets = sorted({(row["target"], row.get("category", "")) for row in findings})
     rows = []
-    for target in targets:
-        count = sum(row["target"] == target for row in accepted)
+    for target, category in targets:
+        count = sum(
+            row["target"] == target and row.get("category", "") == category
+            for row in accepted
+        )
         rows.append({
             "Target": target,
+            "Category": category,
             "Occurrences": count,
             "Per_100_Lexical_Words": (count / total_lexical_words * 100) if total_lexical_words else None,
             "Per_Minute": (count / (duration_seconds / 60)) if duration_seconds and duration_seconds > 0 else None,
