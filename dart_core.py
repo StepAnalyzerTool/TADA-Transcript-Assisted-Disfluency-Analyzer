@@ -11,8 +11,8 @@ from typing import Iterable
 from docx import Document
 
 
-NONLEXICAL_DEFAULTS = ("uh", "um")
-LEXICAL_DEFAULTS = ("so", "therefore")
+NONLEXICAL_DEFAULTS = ("uh", "um", "er", "ah", "mm-hmm", "erm", "hmm", "eh", "huh")
+LEXICAL_DEFAULTS = ("like", "you know", "so", "therefore", "I mean")
 
 TIME_TOKEN = r"(?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?"
 CUE_RE = re.compile(rf"^\s*({TIME_TOKEN})\s*-->\s*({TIME_TOKEN})(?:\s+.*)?$", re.MULTILINE)
