@@ -386,8 +386,14 @@ if duration_source == "Detected from transcript timestamps":
         )
         duration_seconds = duration_minutes * 60
 elif duration_source == "Manually entered":
-    duration_minutes = st.number_input("Session duration (minutes)", min_value=0.01, value=1.00, step=0.01)
-    duration_seconds = duration_minutes * 60
+    duration_minutes = st.number_input(
+        "Session duration (minutes)",
+        min_value=0.01,
+        value=None,
+        step=0.01,
+        placeholder="Enter verified duration",
+    )
+    duration_seconds = duration_minutes * 60 if duration_minutes is not None else None
 else:
     duration_minutes = None
     duration_seconds = None
