@@ -413,12 +413,23 @@ if st.session_state.manual_findings:
 
 all_findings = reviewed_findings + st.session_state.manual_findings
 metrics = calculate_metrics(all_findings, len(words), duration_seconds)
+accepted_total = sum(bool(row.get("accepted")) for row in all_findings)
+total_per_100_words = accepted_total / len(words) * 100 if words else None
+total_per_minute = accepted_total / (duration_seconds / 60) if duration_seconds else None
 
 st.header("4. Results")
-m1, m2, m3 = st.columns(3)
+m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Total lexical words", f"{len(words):,}")
-m2.metric("Accepted target occurrences", sum(bool(row.get("accepted")) for row in all_findings))
+m2.metric("Accepted disfluencies", accepted_total)
 m3.metric("Verified duration", f"{duration_seconds / 60:.2f} min" if duration_seconds else "Not available")
+m4.metric(
+    "Total per 100 words",
+    f"{total_per_100_words:.3f}" if total_per_100_words is not None else "Not available",
+)
+m5.metric(
+    "Total per minute",
+    f"{total_per_minute:.3f}" if total_per_minute is not None else "Not available",
+)
 metrics_df = pd.DataFrame(metrics)
 if not metrics_df.empty:
     st.dataframe(
@@ -445,7 +456,9 @@ summary = {
     "Duration_Minutes": duration_seconds / 60 if duration_seconds else None,
     "Duration_Source": duration_source,
     "Total_Lexical_Words": len(words),
-    "Accepted_Target_Occurrences": sum(bool(row.get("accepted")) for row in all_findings),
+    "Accepted_Target_Occurrences": accepted_total,
+    "Total_Disfluencies_Per_100_Lexical_Words": total_per_100_words,
+    "Total_Disfluencies_Per_Minute": total_per_minute,
     "Transcript_SHA256": transcript_hash,
 }
 decision_df = pd.DataFrame(all_findings)
