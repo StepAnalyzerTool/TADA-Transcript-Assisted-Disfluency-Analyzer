@@ -112,13 +112,22 @@ def split_targets(value: str) -> list[str]:
     return list(dict.fromkeys(item.strip().casefold() for item in value.split(",") if item.strip()))
 
 
-def export_workbook(summary: dict, metrics: list[dict], decisions: pd.DataFrame, cleaned_text: str) -> bytes:
+def export_workbook(
+    summary: dict,
+    metrics: list[dict],
+    decisions: pd.DataFrame,
+    original_text: str,
+    analyzed_text: str,
+) -> bytes:
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
         pd.DataFrame([summary]).to_excel(writer, sheet_name="Session_Summary", index=False)
         pd.DataFrame(metrics).to_excel(writer, sheet_name="Target_Metrics", index=False)
         decisions.to_excel(writer, sheet_name="Occurrence_Review", index=False)
-        pd.DataFrame([{"Reviewed_Transcript": cleaned_text}]).to_excel(
+        pd.DataFrame([{
+            "Original_Selected_Text": original_text,
+            "Analyzed_Text": analyzed_text,
+        }]).to_excel(
             writer, sheet_name="Reviewed_Transcript", index=False
         )
     return buffer.getvalue()
@@ -314,15 +323,39 @@ if not raw_text.strip():
 parsed = parse_transcript(raw_text, source_format)
 
 st.header("2. Select speech and verify duration")
-analysis_text = parsed.full_text
+selected_text = parsed.full_text
 if parsed.speaker_text:
     options = ["All detected speech"] + sorted(parsed.speaker_text)
     chosen_speaker = st.selectbox("Speaker", options)
     if chosen_speaker != "All detected speech":
-        analysis_text = parsed.speaker_text[chosen_speaker]
+        selected_text = parsed.speaker_text[chosen_speaker]
 else:
     chosen_speaker = "Not available"
     st.caption("No reliable speaker labels were detected.")
+
+st.subheader("Edit text included in analysis")
+st.caption(
+    "To exclude speech from another person, select that passage below and delete it. "
+    "This changes only the working copy; the original uploaded transcript is preserved."
+)
+editor_source_key = hashlib.sha256(
+    (source_name + "|" + chosen_speaker + "|" + selected_text).encode()
+).hexdigest()[:16]
+editor_key = f"analysis_text_{editor_source_key}"
+if editor_key not in st.session_state:
+    st.session_state[editor_key] = selected_text
+analysis_text = st.text_area(
+    "Text included in analysis",
+    key=editor_key,
+    height=320,
+)
+if st.button("Restore original selected text"):
+    st.session_state[editor_key] = selected_text
+    st.rerun()
+
+if not analysis_text.strip():
+    st.warning("No text remains in the working copy. Restore the original text or retain speech to analyze.")
+    st.stop()
 
 detected_minutes = (
     parsed.detected_duration_seconds / 60 if parsed.detected_duration_seconds is not None else None
@@ -525,7 +558,7 @@ summary = {
     "Transcript_SHA256": transcript_hash,
 }
 decision_df = pd.DataFrame(all_findings)
-workbook = export_workbook(summary, metrics, decision_df, analysis_text)
+workbook = export_workbook(summary, metrics, decision_df, selected_text, analysis_text)
 safe_session = re.sub(r"[^A-Za-z0-9_-]+", "_", session_id).strip("_") or "Session"
 st.download_button(
     "Download reviewed Excel record",
