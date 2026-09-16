@@ -41,7 +41,11 @@ PAGE_DESCRIPTIONS = {
 }
 
 PAGE_NOTICES = {
-    "Disfluency coding": "TADA identifies candidate speech events for human review.",
+    "Disfluency coding": (
+        "TADA identifies candidates for human review. A candidate is a literal occurrence of a configured "
+        "word, phrase, or vocalization. Candidate status does not indicate that the occurrence meets the "
+        "operational definition of a disfluency."
+    ),
     "IOA calculator": (
         "Upload independently completed Primary and Secondary review files for the same participant and session."
     ),
@@ -126,6 +130,12 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.info(PAGE_NOTICES[tool_mode])
+st.warning(
+    "TADA is not a permanent storage system. The application does not include a database or code that "
+    "permanently stores uploaded transcripts, coding decisions, or generated workbooks. Download the Excel "
+    "output before refreshing or closing the browser tab or selecting another tool. Refreshing, closing, or "
+    "switching tools can clear inputs that have not been downloaded."
+)
 
 clickable_transcript = components.declare_component(
     "tada_clickable_transcript",
@@ -147,6 +157,10 @@ def render_coding_quick_guide() -> None:
             "5. **Review every candidate.** Detected candidates are accepted by default. Click a highlighted candidate to reject it; click it again to return it to accepted.\n"
             "6. **Correct omissions.** Add a disfluency manually if it is missing from the automatically detected candidates.\n"
             "7. **Export the record.** Enter the participant, session, and reviewer information and download the Excel workbook."
+        )
+        st.markdown(
+            "**Before leaving this page:** Download the Excel record if you need to retain the transcript, coding decisions, or results. "
+            "Selecting **IOA calculator** or **Consolidate summaries** reruns the application and can clear coding-page inputs that have not been downloaded."
         )
 
 
@@ -446,7 +460,9 @@ def render_summary_consolidator() -> None:
             "3. TADA aligns session fields and target measures by column name. A target may appear in some uploaded records and not others.\n"
             "4. Review the on-screen table, then download the consolidated workbook. Each uploaded session record becomes one row.\n\n"
             "**Interpretation of cells:** A numeric zero means the source workbook contained that measure and reported zero. "
-            "A blank cell means the source workbook did not contain that field or target column; a blank is not converted to zero."
+            "A blank cell means the source workbook did not contain that field or target column; a blank is not converted to zero.\n\n"
+            "**Before leaving this page:** Download the consolidated workbook if you need to retain it. "
+            "The uploaded files and consolidated table are not a permanent record within TADA."
         )
     uploaded_files = st.file_uploader(
         "TADA Excel records",
@@ -501,7 +517,9 @@ def render_ioa_calculator() -> None:
             "The transcript hash changes when the analyzed transcript text changes.\n"
             "4. Upload the Primary file in the left field and the Secondary file in the right field.\n"
             "5. Download the results workbook. It contains the agreement measures and a separate list of unmatched or differently coded occurrences.\n\n"
-            "The calculator does not change either reviewer's original Excel record and does not reconcile disagreements."
+            "The calculator does not change either reviewer's original Excel record and does not reconcile disagreements.\n\n"
+            "**Before leaving this page:** Download the IOA results workbook if you need to retain the calculated agreement results and discrepancy list. "
+            "The uploaded review files and calculated results are not a permanent record within TADA."
         )
     ioa_primary_col, ioa_secondary_col = st.columns(2)
     primary_file = ioa_primary_col.file_uploader(
