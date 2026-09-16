@@ -42,9 +42,9 @@ PAGE_DESCRIPTIONS = {
 
 PAGE_NOTICES = {
     "Disfluency coding": (
-        "TADA identifies candidates for human review. A candidate is a literal occurrence of a configured "
-        "word, phrase, or vocalization. Candidate status does not indicate that the occurrence meets the "
-        "operational definition of a disfluency."
+        "TADA identifies candidate disfluencies for researcher review. A candidate is a literal occurrence "
+        "of a user-configured word, phrase, or vocalization. Researchers may accept or reject any candidate "
+        "based on the operational definitions for their study."
     ),
     "IOA calculator": (
         "Upload independently completed Primary and Secondary review files for the same participant and session."
