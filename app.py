@@ -130,12 +130,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.info(PAGE_NOTICES[tool_mode])
-st.warning(
-    "TADA is not a permanent storage system. The application does not include a database or code that "
-    "permanently stores uploaded transcripts, coding decisions, or generated workbooks. Download the Excel "
-    "output before refreshing or closing the browser tab or selecting another tool. Refreshing, closing, or "
-    "switching tools can clear inputs that have not been downloaded."
-)
 
 clickable_transcript = components.declare_component(
     "tada_clickable_transcript",
@@ -145,6 +139,13 @@ clickable_transcript = components.declare_component(
 
 def split_targets(value: str) -> list[str]:
     return list(dict.fromkeys(item.strip().casefold() for item in value.split(",") if item.strip()))
+
+
+def render_storage_notice() -> None:
+    st.warning(
+        "TADA is not a permanent storage system. The application does not permanently store uploaded "
+        "transcripts, coding decisions, or generated workbooks. Refreshing the page deletes all data."
+    )
 
 
 def render_coding_quick_guide() -> None:
@@ -472,6 +473,7 @@ def render_summary_consolidator() -> None:
     )
     if len(uploaded_files) < 2:
         st.info("Upload at least two TADA Excel records to create a consolidated summary.")
+        render_storage_notice()
         return
 
     summary_frames = []
@@ -488,6 +490,7 @@ def render_summary_consolidator() -> None:
             errors.append(f"{uploaded_file.name}: {error}")
     if errors:
         st.error("Unable to consolidate:\n\n" + "\n\n".join(errors))
+        render_storage_notice()
         return
 
     consolidated = pd.concat(summary_frames, ignore_index=True, sort=False)
@@ -504,6 +507,7 @@ def render_summary_consolidator() -> None:
         file_name="TADA_Consolidated_Summaries.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    render_storage_notice()
 
 
 def render_ioa_calculator() -> None:
@@ -530,6 +534,7 @@ def render_ioa_calculator() -> None:
     )
     if not primary_file or not secondary_file:
         st.info("Upload both review files to calculate agreement.")
+        render_storage_notice()
         return
     try:
         primary_data = read_review_workbook(primary_file)
@@ -537,6 +542,7 @@ def render_ioa_calculator() -> None:
         ioa_results, ioa_discrepancies = compare_review_workbooks(primary_data, secondary_data)
     except Exception as error:
         st.error(f"Unable to compare these files: {error}")
+        render_storage_notice()
         return
 
     st.subheader("Agreement results")
@@ -565,6 +571,7 @@ def render_ioa_calculator() -> None:
         file_name=f"IOA_{safe_ioa_participant}_{safe_ioa_session}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+    render_storage_notice()
 
 
 if tool_mode == "IOA calculator":
@@ -614,6 +621,7 @@ else:
     raw_text = st.text_area("Paste transcript", height=240)
 
 if not raw_text.strip():
+    render_storage_notice()
     st.stop()
 
 parsed = parse_transcript(raw_text, source_format)
@@ -669,6 +677,7 @@ if st.button("Restore original selected text"):
 
 if not analysis_text.strip():
     st.warning("No text remains in the working copy. Restore the original text or retain speech to analyze.")
+    render_storage_notice()
     st.stop()
 
 detected_minutes = (
@@ -972,3 +981,4 @@ st.download_button(
 )
 if not participant_id.strip() or not reviewer_id.strip():
     st.caption("Enter participant and reviewer identifiers to enable the audit-ready export.")
+render_storage_notice()
