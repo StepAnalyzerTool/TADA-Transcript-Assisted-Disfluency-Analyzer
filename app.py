@@ -336,7 +336,6 @@ def ordered_summary_columns(frame: pd.DataFrame) -> list[str]:
         "Nonlexical_Disfluencies_Per_Minute",
     ]
     target_suffixes = (
-        "_Category",
         "_Total_Disfluencies",
         "_Disfluencies_Per_100_Words",
         "_Disfluencies_Per_Minute",
@@ -361,6 +360,34 @@ def ordered_summary_columns(frame: pd.DataFrame) -> list[str]:
     ordered.extend(column for column in audit_columns if column in frame.columns and column not in ordered)
     ordered.extend(column for column in frame.columns if column not in ordered)
     return ordered
+
+
+def normalize_summary_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    """Translate earlier TADA summary schemas into the current column names."""
+    normalized = frame.copy()
+    legacy_map = {
+        "Session_Information": "Session_ID",
+        "Analysis_Date": "Session_Date",
+        "Total_Words_Spoken": "Total_Lexical_Words",
+        "Total_Disfluencies": "Accepted_Target_Occurrences",
+        "Total_Disfluencies_Per_100_Words": "Total_Disfluencies_Per_100_Lexical_Words",
+    }
+    for current_column, legacy_column in legacy_map.items():
+        if legacy_column not in normalized.columns:
+            continue
+        if current_column not in normalized.columns:
+            normalized[current_column] = normalized[legacy_column]
+        else:
+            normalized[current_column] = normalized[current_column].where(
+                normalized[current_column].notna(), normalized[legacy_column]
+            )
+
+    legacy_columns = [column for column in legacy_map.values() if column in normalized.columns]
+    target_category_columns = [
+        column for column in normalized.columns
+        if column.startswith("Target_") and column.endswith("_Category")
+    ]
+    return normalized.drop(columns=legacy_columns + target_category_columns)
 
 
 def export_consolidated_summaries(frame: pd.DataFrame) -> bytes:
@@ -393,6 +420,7 @@ def render_summary_consolidator() -> None:
             summary_frame = pd.read_excel(uploaded_file, sheet_name="Session_Summary")
             if summary_frame.empty:
                 raise ValueError("Session_Summary is empty")
+            summary_frame = normalize_summary_columns(summary_frame)
             summary_frame.insert(0, "Source_Workbook", uploaded_file.name)
             summary_frames.append(summary_frame)
         except Exception as error:
@@ -783,7 +811,6 @@ for category in ("Lexical", "Nonlexical"):
 for target_metric in metrics:
     target_slug = re.sub(r"[^A-Za-z0-9]+", "_", target_metric["Target"]).strip("_") or "Target"
     target_prefix = f"Target_{target_slug}"
-    summary[f"{target_prefix}_Category"] = target_metric.get("Category", "")
     summary[f"{target_prefix}_Total_Disfluencies"] = target_metric["Occurrences"]
     summary[f"{target_prefix}_Disfluencies_Per_100_Words"] = target_metric["Per_100_Lexical_Words"]
     summary[f"{target_prefix}_Disfluencies_Per_Minute"] = target_metric["Per_Minute"]
