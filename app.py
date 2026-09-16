@@ -35,7 +35,7 @@ with st.sidebar:
     )
 
 PAGE_DESCRIPTIONS = {
-    "Disfluency coding": "Review a transcript, verify disfluencies, and calculate session measures.",
+    "Disfluency coding": "Review a transcript, verify disfluencies, and summarize session data.",
     "IOA calculator": "Compare independently coded records and calculate interobserver agreement.",
     "Consolidate summaries": "Combine session summaries from multiple TADA Excel records.",
 }
