@@ -28,6 +28,28 @@ from tada_core import (
 
 APP_TITLE = "Smooth Talking: Transcript-Assisted Disfluency Analyzer (TADA)"
 
+with st.sidebar:
+    tool_mode = st.radio(
+        "Select tool",
+        ["Disfluency coding", "IOA calculator", "Consolidate summaries"],
+    )
+
+PAGE_DESCRIPTIONS = {
+    "Disfluency coding": "Review a transcript, verify disfluencies, and calculate session measures.",
+    "IOA calculator": "Compare independently coded records and calculate interobserver agreement.",
+    "Consolidate summaries": "Combine session summaries from multiple TADA Excel records.",
+}
+
+PAGE_NOTICES = {
+    "Disfluency coding": "TADA identifies candidate speech events for human review.",
+    "IOA calculator": (
+        "Upload independently completed Primary and Secondary review files for the same participant and session."
+    ),
+    "Consolidate summaries": (
+        "Upload two or more TADA Excel records to combine their Session_Summary data into one workbook."
+    ),
+}
+
 st.set_page_config(
     page_title=APP_TITLE,
     page_icon="🎯",
@@ -72,10 +94,11 @@ st.markdown(
             margin: 1.35rem 0 1.15rem;
             width: 100%;
         }
-        .tada-tagline {
+        .tada-page-purpose {
             color: var(--tada-slate);
-            font-size: 1.15rem;
-            font-style: italic;
+            font-size: clamp(1.25rem, 2vw, 1.6rem);
+            font-weight: 600;
+            line-height: 1.35;
         }
         section[data-testid="stSidebar"] { background-color: #f7fafc; }
         h2, h3 { color: var(--tada-navy); }
@@ -97,12 +120,12 @@ st.markdown(
         <div class="tada-name">Smooth Talking</div>
         <div class="tada-expanded">Transcript-Assisted Disfluency Analyzer</div>
         <div class="tada-rule"></div>
-        <div class="tada-tagline">From the CVC Cosmos · Making every word count.</div>
+        <div class="tada-page-purpose">__PAGE_PURPOSE__</div>
     </div>
-    """,
+    """.replace("__PAGE_PURPOSE__", PAGE_DESCRIPTIONS[tool_mode]),
     unsafe_allow_html=True,
 )
-st.info("TADA identifies candidate speech events for human review.")
+st.info(PAGE_NOTICES[tool_mode])
 
 clickable_transcript = components.declare_component(
     "tada_clickable_transcript",
@@ -491,12 +514,6 @@ def render_ioa_calculator() -> None:
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-
-with st.sidebar:
-    tool_mode = st.radio(
-        "Select tool",
-        ["Disfluency coding", "IOA calculator", "Consolidate summaries"],
-    )
 
 if tool_mode == "IOA calculator":
     render_ioa_calculator()
