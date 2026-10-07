@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+import json
 import re
 from typing import Iterable
 
@@ -30,6 +31,7 @@ class TranscriptParse:
     detected_duration_seconds: float | None
     first_timestamp_seconds: float | None
     last_timestamp_seconds: float | None
+    source_word_timings: tuple[dict, ...] = ()
 
 
 def timestamp_seconds(value: str) -> float:
@@ -49,8 +51,21 @@ def _decode_upload(data: bytes, filename: str) -> str:
     if suffix == ".docx":
         document = Document(BytesIO(data))
         return "\n".join(p.text for p in document.paragraphs)
+    if suffix == ".json":
+        for encoding in ("utf-8-sig", "utf-8"):
+            try:
+                payload = json.loads(data.decode(encoding))
+                text = payload.get("text", "") if isinstance(payload, dict) else ""
+                if not isinstance(text, str) or not text.strip():
+                    raise ValueError("The JSON file does not contain a usable top-level text field.")
+                return text
+            except UnicodeDecodeError:
+                continue
+            except json.JSONDecodeError as exc:
+                raise ValueError("The JSON file could not be parsed.") from exc
+        raise ValueError("The JSON text encoding could not be read.")
     if suffix not in {".txt", ".vtt", ".srt"}:
-        raise ValueError("Supported files are .txt, .docx, .vtt, and .srt.")
+        raise ValueError("Supported files are .txt, .docx, .vtt, .srt, and ElevenLabs .json.")
     for encoding in ("utf-8-sig", "utf-8", "cp1252"):
         try:
             return data.decode(encoding)
@@ -61,6 +76,76 @@ def _decode_upload(data: bytes, filename: str) -> str:
 
 def read_transcript_upload(data: bytes, filename: str) -> str:
     return _decode_upload(data, filename)
+
+
+def parse_elevenlabs_json_upload(data: bytes, filename: str = "transcript.json") -> TranscriptParse:
+    """Parse an ElevenLabs Speech-to-Text JSON export.
+
+    The top-level transcript text is used as the transcript of record. Word-level
+    timing records are retained for audit/export, and the file-level audio
+    duration is used when available.
+    """
+    payload = None
+    for encoding in ("utf-8-sig", "utf-8"):
+        try:
+            payload = json.loads(data.decode(encoding))
+            break
+        except UnicodeDecodeError:
+            continue
+        except json.JSONDecodeError as exc:
+            raise ValueError("The JSON file could not be parsed.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("The JSON file must contain an object at the top level.")
+
+    full_text = payload.get("text", "")
+    if not isinstance(full_text, str) or not full_text.strip():
+        raise ValueError("The JSON file does not contain a usable top-level text field.")
+
+    raw_words = payload.get("words", [])
+    if not isinstance(raw_words, list):
+        raw_words = []
+
+    timings = []
+    starts = []
+    ends = []
+    for item in raw_words:
+        if not isinstance(item, dict):
+            continue
+        start = item.get("start")
+        end = item.get("end")
+        if isinstance(start, (int, float)):
+            starts.append(float(start))
+        if isinstance(end, (int, float)):
+            ends.append(float(end))
+        timings.append({
+            "text": item.get("text", ""),
+            "start": float(start) if isinstance(start, (int, float)) else None,
+            "end": float(end) if isinstance(end, (int, float)) else None,
+            "type": item.get("type", ""),
+            "logprob": item.get("logprob"),
+        })
+
+    audio_duration = payload.get("audio_duration_secs")
+    if isinstance(audio_duration, (int, float)) and audio_duration > 0:
+        duration = float(audio_duration)
+        first = 0.0
+        last = duration
+    elif ends:
+        first = min(starts) if starts else 0.0
+        last = max(ends)
+        duration = last
+    else:
+        first = last = duration = None
+
+    return TranscriptParse(
+        source_format="json",
+        full_text=full_text.strip(),
+        speaker_text={},
+        detected_duration_seconds=duration,
+        first_timestamp_seconds=first,
+        last_timestamp_seconds=last,
+        source_word_timings=tuple(timings),
+    )
 
 
 def _is_cue_number(line: str) -> bool:
