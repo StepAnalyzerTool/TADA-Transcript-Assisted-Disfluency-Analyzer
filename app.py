@@ -705,8 +705,9 @@ duration_source = st.selectbox(
 )
 with st.expander("How duration affects the results"):
     st.markdown(
-        "For a transcript with usable timestamps, TADA calculates the elapsed time from the first detected timestamp to the last detected timestamp. "
-        "Verify that this interval represents the intended observation. If it does not, select **Manually entered** and enter the verified duration in minutes.\n\n"
+        "For caption transcripts with usable timestamps, TADA calculates elapsed time from the first detected timestamp to the last detected timestamp. "
+        "For ElevenLabs JSON imports, TADA uses the file-level audio duration when available and otherwise the final source timestamp. "
+        "Verify that this duration represents the intended observation. If it does not, select **Manually entered** and enter the verified duration in minutes.\n\n"
         "Duration is used only for rates per minute. It does not change the transcript, word count, or disfluency count. "
         "If **Not available** is selected, TADA reports counts and rates per 100 words but leaves rates per minute unavailable."
     )
@@ -928,7 +929,7 @@ with st.expander("Information stored in the Excel workbook"):
     st.markdown(
         "Enter a participant ID, session description, reviewer ID, reviewer role, and analysis date. "
         "Do not enter directly identifying information when your data-management procedures require de-identification.\n\n"
-        "The downloaded workbook contains four worksheets:\n"
+        "The downloaded workbook contains four standard worksheets. ElevenLabs JSON imports also include a fifth `Source_Timestamps` worksheet:\n"
         "- **Session_Summary:** Session identifiers, duration, total spoken words, overall counts and rates, lexical and nonlexical counts and rates, and counts and rates for each configured target.\n"
         "- **Target_Metrics:** Count, rate per 100 words, and rate per minute for every configured target and any manually added target. Configured targets with no accepted occurrences are retained with zero occurrences.\n"
         "- **Occurrence_Review:** Every detected and manually added occurrence, its category, accepted or rejected status, context, and reviewer note.\n"
