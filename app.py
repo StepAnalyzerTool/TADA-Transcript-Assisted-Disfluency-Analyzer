@@ -22,6 +22,7 @@ from tada_core import (
     lexical_tokens,
     normalize_for_analysis,
     parse_transcript,
+    parse_elevenlabs_json_upload,
     read_transcript_upload,
 )
 
@@ -152,7 +153,7 @@ def render_coding_quick_guide() -> None:
     with st.expander("How to code a transcript with TADA", expanded=True):
         st.markdown(
             "1. **Configure targets.** Add or remove lexical words or phrases and nonlexical vocalizations in the sidebar.\n"
-            "2. **Add the transcript.** Upload a `.txt`, `.docx`, `.vtt`, or `.srt` file, or paste transcript text.\n"
+            "2. **Add the transcript.** Upload a `.txt`, `.docx`, `.vtt`, `.srt`, or ElevenLabs `.json` file, or paste transcript text.\n"
             "3. **Define the analyzed speech.** Select a detected speaker when available, then delete any speech or material that should not enter the analysis.\n"
             "4. **Verify duration.** Confirm the timestamp-based duration, enter the duration manually, or select **Not available**.\n"
             "5. **Review every candidate.** Detected candidates are accepted by default. Click a highlighted candidate to reject it; click it again to return it to accepted.\n"
@@ -179,6 +180,7 @@ def style_export_workbook(writer: pd.ExcelWriter) -> None:
         "Target_Metrics": teal,
         "Occurrence_Review": "6FA8DC",
         "Reviewed_Transcript": "98A2B3",
+        "Source_Timestamps": "7A9E9F",
     }
 
     for sheet_name, worksheet in writer.sheets.items():
@@ -230,6 +232,7 @@ def export_workbook(
     decisions: pd.DataFrame,
     original_text: str,
     analyzed_text: str,
+    source_word_timings: tuple[dict, ...] | list[dict] | None = None,
 ) -> bytes:
     buffer = BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -242,6 +245,10 @@ def export_workbook(
         }]).to_excel(
             writer, sheet_name="Reviewed_Transcript", index=False
         )
+        if source_word_timings:
+            pd.DataFrame(list(source_word_timings)).to_excel(
+                writer, sheet_name="Source_Timestamps", index=False
+            )
         style_export_workbook(writer)
     return buffer.getvalue()
 
@@ -601,22 +608,27 @@ with st.sidebar:
 st.header("1. Add a transcript")
 with st.expander("Supported files and transcript preparation"):
     st.markdown(
-        "TADA accepts `.txt`, `.docx`, `.vtt`, and `.srt` files. You may instead paste transcript text. "
+        "TADA accepts `.txt`, `.docx`, `.vtt`, `.srt`, and ElevenLabs Speech-to-Text `.json` files. You may instead paste transcript text. "
         "For caption files, TADA removes cue numbers, timestamp lines, common caption metadata, and formatting tags before searching for targets.\n\n"
         "Use a de-identified transcript when required by your research or institutional procedures. "
         "After upload, inspect the analyzed text for transcription errors, incorrect speaker labels, and speech that falls outside the intended observation."
     )
 input_method = st.radio("Transcript source", ["Upload a file", "Paste text"], horizontal=True)
 uploaded = None
+parsed_upload = None
 raw_text = ""
 source_name = "Pasted transcript"
 source_format = "pasted text"
 if input_method == "Upload a file":
-    uploaded = st.file_uploader("Upload transcript", type=["txt", "docx", "vtt", "srt"])
+    uploaded = st.file_uploader("Upload transcript", type=["txt", "docx", "vtt", "srt", "json"])
     if uploaded:
-        raw_text = read_transcript_upload(uploaded.getvalue(), uploaded.name)
         source_name = uploaded.name
         source_format = uploaded.name.rsplit(".", 1)[-1].lower()
+        if source_format == "json":
+            parsed_upload = parse_elevenlabs_json_upload(uploaded.getvalue(), uploaded.name)
+            raw_text = parsed_upload.full_text
+        else:
+            raw_text = read_transcript_upload(uploaded.getvalue(), uploaded.name)
 else:
     raw_text = st.text_area("Paste transcript", height=240)
 
@@ -624,7 +636,9 @@ if not raw_text.strip():
     render_storage_notice()
     st.stop()
 
-parsed = parse_transcript(raw_text, source_format)
+parsed = parsed_upload or parse_transcript(raw_text, source_format)
+if source_format == "json":
+    st.success("ElevenLabs JSON detected. TADA is using the JSON transcript text and has retained the source word-level timestamps for export.")
 
 st.header("2. Select speech and verify duration")
 with st.expander("What speaker selection and text deletion change"):
@@ -918,7 +932,8 @@ with st.expander("Information stored in the Excel workbook"):
         "- **Session_Summary:** Session identifiers, duration, total spoken words, overall counts and rates, lexical and nonlexical counts and rates, and counts and rates for each configured target.\n"
         "- **Target_Metrics:** Count, rate per 100 words, and rate per minute for every configured target and any manually added target. Configured targets with no accepted occurrences are retained with zero occurrences.\n"
         "- **Occurrence_Review:** Every detected and manually added occurrence, its category, accepted or rejected status, context, and reviewer note.\n"
-        "- **Reviewed_Transcript:** The text initially selected after speaker processing and the final edited text used for analysis.\n\n"
+        "- **Reviewed_Transcript:** The text initially selected after speaker processing and the final edited text used for analysis.\n"
+        "- **Source_Timestamps:** For ElevenLabs JSON imports, the original word/spacing/audio-event records with start and end times.\n\n"
         "The transcript hash is calculated from the final analyzed text and is used to verify that Primary and Secondary records contain the same analyzed transcript."
     )
 participant_col, session_col = st.columns(2)
@@ -969,7 +984,7 @@ for target_metric in metrics:
 summary["Duration_Source"] = duration_source
 summary["Transcript_SHA256"] = transcript_hash
 decision_df = pd.DataFrame(all_findings)
-workbook = export_workbook(summary, metrics, decision_df, selected_text, analysis_text)
+workbook = export_workbook(summary, metrics, decision_df, selected_text, analysis_text, parsed.source_word_timings)
 safe_participant = re.sub(r"[^A-Za-z0-9_-]+", "_", participant_id).strip("_") or "Participant"
 safe_session = re.sub(r"[^A-Za-z0-9_-]+", "_", session_information).strip("_") or "Session"
 st.download_button(
