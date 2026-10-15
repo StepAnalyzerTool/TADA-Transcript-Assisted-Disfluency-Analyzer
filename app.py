@@ -910,7 +910,7 @@ with st.expander("Counting rules and formulas"):
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Total spoken words", f"{len(words):,}")
 m2.metric("Accepted disfluencies", accepted_total)
-m3.metric("Verified duration", f"{duration_seconds / 60:.2f} min" if duration_seconds else "Not available")
+m3.metric("Verified duration", f"{duration_seconds / 60:g} min" if duration_seconds else "Not available")
 m4.metric(
     "Total per 100 words",
     f"{total_per_100_words:.3f}" if total_per_100_words is not None else "Not available",
