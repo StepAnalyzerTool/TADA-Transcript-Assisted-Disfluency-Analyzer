@@ -608,7 +608,7 @@ with st.sidebar:
 st.header("1. Add a transcript")
 with st.expander("Supported files and transcript preparation"):
     st.markdown(
-        "TADA accepts `.txt`, `.docx`, `.vtt`, `.srt`, and ElevenLabs Speech-to-Text `.json` files. You may instead paste transcript text. "
+        "TADA accepts `.txt`, `.docx`, `.vtt`, `.srt`, and supported `.json` transcript files, including ElevenLabs Speech-to-Text JSON. You may instead paste transcript text. "
         "For caption files, TADA removes cue numbers, timestamp lines, common caption metadata, and formatting tags before searching for targets.\n\n"
         "Use a de-identified transcript when required by your research or institutional procedures. "
         "After upload, inspect the analyzed text for transcription errors, incorrect speaker labels, and speech that falls outside the intended observation."
@@ -638,7 +638,10 @@ if not raw_text.strip():
 
 parsed = parsed_upload or parse_transcript(raw_text, source_format)
 if source_format == "json":
-    st.success("ElevenLabs JSON detected. TADA is using the JSON transcript text and has retained the source word-level timestamps for export.")
+    st.success(
+        "JSON transcript detected. TADA is using the available transcript text and has retained "
+        "source timing records for export when they are present."
+    )
 
 st.header("2. Select speech and verify duration")
 with st.expander("What speaker selection and text deletion change"):
