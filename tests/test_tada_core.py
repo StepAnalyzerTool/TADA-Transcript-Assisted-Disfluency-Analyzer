@@ -8,6 +8,7 @@ from tada_core import (
     find_candidates,
     lexical_tokens,
     parse_transcript,
+    parse_elevenlabs_json_upload,
     timestamp_seconds,
 )
 
@@ -24,6 +25,29 @@ class TadaCoreTests(unittest.TestCase):
         self.assertEqual(timestamp_seconds("00:01:30.500"), 90.5)
         self.assertEqual(timestamp_seconds("01:05,250"), 65.25)
 
+
+    def test_timestamped_json_list_without_top_level_text(self):
+        payload = b"""[
+            {"timestamp": [0.0, 1.2], "text": "Hello everyone."},
+            {"timestamp": [1.2, 3.5], "text": "So we begin."}
+        ]"""
+        parsed = parse_elevenlabs_json_upload(payload, "transcript.json")
+        self.assertEqual(parsed.full_text, "Hello everyone. So we begin.")
+        self.assertEqual(parsed.detected_duration_seconds, 3.5)
+        self.assertEqual(len(parsed.source_word_timings), 2)
+
+    def test_json_reconstructs_text_from_words_when_top_level_text_missing(self):
+        payload = b"""{
+            "audio_duration_secs": 2.0,
+            "words": [
+                {"text": "Hello", "start": 0.0, "end": 0.5, "type": "word"},
+                {"text": " ", "start": 0.5, "end": 0.6, "type": "spacing"},
+                {"text": "world.", "start": 0.6, "end": 1.1, "type": "word"}
+            ]
+        }"""
+        parsed = parse_elevenlabs_json_upload(payload, "words_only.json")
+        self.assertEqual(parsed.full_text, "Hello world.")
+        self.assertEqual(parsed.detected_duration_seconds, 2.0)
 
     def test_vtt_parsing_and_duration(self):
         text = """WEBVTT
