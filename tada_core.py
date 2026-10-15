@@ -52,18 +52,7 @@ def _decode_upload(data: bytes, filename: str) -> str:
         document = Document(BytesIO(data))
         return "\n".join(p.text for p in document.paragraphs)
     if suffix == ".json":
-        for encoding in ("utf-8-sig", "utf-8"):
-            try:
-                payload = json.loads(data.decode(encoding))
-                text = payload.get("text", "") if isinstance(payload, dict) else ""
-                if not isinstance(text, str) or not text.strip():
-                    raise ValueError("The JSON file does not contain a usable top-level text field.")
-                return text
-            except UnicodeDecodeError:
-                continue
-            except json.JSONDecodeError as exc:
-                raise ValueError("The JSON file could not be parsed.") from exc
-        raise ValueError("The JSON text encoding could not be read.")
+        return parse_elevenlabs_json_upload(data, filename).full_text
     if suffix not in {".txt", ".vtt", ".srt"}:
         raise ValueError("Supported files are .txt, .docx, .vtt, .srt, and ElevenLabs .json.")
     for encoding in ("utf-8-sig", "utf-8", "cp1252"):
@@ -79,11 +68,13 @@ def read_transcript_upload(data: bytes, filename: str) -> str:
 
 
 def parse_elevenlabs_json_upload(data: bytes, filename: str = "transcript.json") -> TranscriptParse:
-    """Parse an ElevenLabs Speech-to-Text JSON export.
+    """Parse supported JSON transcript exports.
 
-    The top-level transcript text is used as the transcript of record. Word-level
-    timing records are retained for audit/export, and the file-level audio
-    duration is used when available.
+    ElevenLabs Speech-to-Text exports normally contain a top-level text field
+    plus word-level timing records. TADA also accepts common timestamped JSON
+    transcript structures that contain segment records instead of a top-level
+    text field. When necessary, transcript text is reconstructed from available
+    word or segment records.
     """
     payload = None
     for encoding in ("utf-8-sig", "utf-8"):
@@ -94,38 +85,112 @@ def parse_elevenlabs_json_upload(data: bytes, filename: str = "transcript.json")
             continue
         except json.JSONDecodeError as exc:
             raise ValueError("The JSON file could not be parsed.") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("The JSON file must contain an object at the top level.")
 
-    full_text = payload.get("text", "")
-    if not isinstance(full_text, str) or not full_text.strip():
-        raise ValueError("The JSON file does not contain a usable top-level text field.")
+    timings: list[dict] = []
+    starts: list[float] = []
+    ends: list[float] = []
+    audio_duration = None
 
-    raw_words = payload.get("words", [])
-    if not isinstance(raw_words, list):
-        raw_words = []
-
-    timings = []
-    starts = []
-    ends = []
-    for item in raw_words:
-        if not isinstance(item, dict):
-            continue
-        start = item.get("start")
-        end = item.get("end")
-        if isinstance(start, (int, float)):
-            starts.append(float(start))
-        if isinstance(end, (int, float)):
-            ends.append(float(end))
+    def add_timing(text_value, start_value, end_value, item_type="", logprob=None):
+        start_num = float(start_value) if isinstance(start_value, (int, float)) else None
+        end_num = float(end_value) if isinstance(end_value, (int, float)) else None
+        if start_num is not None:
+            starts.append(start_num)
+        if end_num is not None:
+            ends.append(end_num)
         timings.append({
-            "text": item.get("text", ""),
-            "start": float(start) if isinstance(start, (int, float)) else None,
-            "end": float(end) if isinstance(end, (int, float)) else None,
-            "type": item.get("type", ""),
-            "logprob": item.get("logprob"),
+            "text": text_value if isinstance(text_value, str) else "",
+            "start": start_num,
+            "end": end_num,
+            "type": item_type,
+            "logprob": logprob,
         })
 
-    audio_duration = payload.get("audio_duration_secs")
+    full_text = ""
+
+    if isinstance(payload, dict):
+        top_text = payload.get("text", "")
+        if isinstance(top_text, str) and top_text.strip():
+            full_text = top_text.strip()
+
+        raw_words = payload.get("words", [])
+        if not isinstance(raw_words, list):
+            raw_words = []
+
+        for item in raw_words:
+            if not isinstance(item, dict):
+                continue
+            add_timing(
+                item.get("text", ""),
+                item.get("start"),
+                item.get("end"),
+                item.get("type", ""),
+                item.get("logprob"),
+            )
+
+        if not full_text and raw_words:
+            pieces = [item.get("text", "") for item in raw_words if isinstance(item, dict)]
+            pieces = [piece for piece in pieces if isinstance(piece, str) and piece]
+            if any(piece[:1].isspace() or piece[-1:].isspace() for piece in pieces):
+                full_text = "".join(pieces).strip()
+            else:
+                word_pieces = [
+                    item.get("text", "")
+                    for item in raw_words
+                    if isinstance(item, dict)
+                    and isinstance(item.get("text"), str)
+                    and item.get("text")
+                    and item.get("type", "word") not in {"spacing", "audio_event"}
+                ]
+                full_text = " ".join(word_pieces).strip()
+
+        raw_segments = payload.get("segments", [])
+        if not isinstance(raw_segments, list):
+            raw_segments = []
+        if raw_segments and not raw_words:
+            for item in raw_segments:
+                if not isinstance(item, dict):
+                    continue
+                timestamp = item.get("timestamp")
+                start_value = item.get("start")
+                end_value = item.get("end")
+                if isinstance(timestamp, (list, tuple)) and len(timestamp) >= 2:
+                    start_value, end_value = timestamp[0], timestamp[1]
+                add_timing(item.get("text", ""), start_value, end_value, "segment")
+        if not full_text and raw_segments:
+            full_text = " ".join(
+                str(item.get("text", "")).strip()
+                for item in raw_segments
+                if isinstance(item, dict) and str(item.get("text", "")).strip()
+            ).strip()
+
+        audio_duration = payload.get("audio_duration_secs")
+        if audio_duration is None:
+            audio_duration = payload.get("audio_duration_seconds")
+
+    elif isinstance(payload, list):
+        segments = [item for item in payload if isinstance(item, dict)]
+        for item in segments:
+            timestamp = item.get("timestamp")
+            start_value = item.get("start")
+            end_value = item.get("end")
+            if isinstance(timestamp, (list, tuple)) and len(timestamp) >= 2:
+                start_value, end_value = timestamp[0], timestamp[1]
+            add_timing(item.get("text", ""), start_value, end_value, "segment")
+        full_text = " ".join(
+            str(item.get("text", "")).strip()
+            for item in segments
+            if str(item.get("text", "")).strip()
+        ).strip()
+    else:
+        raise ValueError("The JSON file must contain a transcript object or a list of transcript segments.")
+
+    if not full_text:
+        raise ValueError(
+            "The JSON file does not contain usable transcript text. "
+            "TADA supports ElevenLabs JSON exports and timestamped JSON records containing text."
+        )
+
     if isinstance(audio_duration, (int, float)) and audio_duration > 0:
         duration = float(audio_duration)
         first = 0.0
@@ -133,13 +198,13 @@ def parse_elevenlabs_json_upload(data: bytes, filename: str = "transcript.json")
     elif ends:
         first = min(starts) if starts else 0.0
         last = max(ends)
-        duration = last
+        duration = last - first if last >= first else None
     else:
         first = last = duration = None
 
     return TranscriptParse(
         source_format="json",
-        full_text=full_text.strip(),
+        full_text=full_text,
         speaker_text={},
         detected_duration_seconds=duration,
         first_timestamp_seconds=first,
